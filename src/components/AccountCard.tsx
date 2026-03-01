@@ -37,10 +37,23 @@ export function AccountCard({
         <span className="stamp stampPlan">{planLabel}</span>
         {account.isCurrent && <span className="stamp stampCurrent">当前</span>}
       </div>
+      <button
+        className="cardDeleteIcon"
+        onClick={() => onDelete(account)}
+        aria-label="删除账号"
+        title="删除账号"
+      >
+        <svg className="iconGlyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M3 6h18" />
+          <path d="M8 6V4h8v2" />
+          <path d="M19 6l-1 14H6L5 6" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
+        </svg>
+      </button>
       <div className="cardHead">
         <div>
           <h3 className={account.isCurrent ? "nameCurrent" : ""}>{account.label}</h3>
-          <p>{account.email || account.accountId}</p>
         </div>
       </div>
 
@@ -81,11 +94,12 @@ export function AccountCard({
       {account.usageError && <p className="errorText">{account.usageError}</p>}
 
       <div className="cardActions">
-        <button className="primary" onClick={() => onSwitch(account)} disabled={isSwitching}>
+        <button
+          className="primary cardPrimaryAction"
+          onClick={() => onSwitch(account)}
+          disabled={isSwitching}
+        >
           {isSwitching ? "切换中..." : switchActionLabel}
-        </button>
-        <button className="danger" onClick={() => onDelete(account)}>
-          删除
         </button>
       </div>
     </article>

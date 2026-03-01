@@ -146,6 +146,19 @@ export function useCodexController() {
     installingUpdateRef.current = installingUpdate;
   }, [installingUpdate]);
 
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+    const ttl = notice.type === "error" ? 6_000 : 3_500;
+    const timer = window.setTimeout(() => {
+      setNotice((current) => (current === notice ? null : current));
+    }, ttl);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [notice]);
+
   const installPendingUpdate = useCallback(
     async (knownUpdate?: NonNullable<Awaited<ReturnType<typeof check>>>) => {
       if (installingUpdateRef.current) {

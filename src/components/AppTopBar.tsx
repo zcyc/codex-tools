@@ -21,6 +21,22 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
+function UpdateIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      className={`iconGlyph ${spinning ? "isSpinning" : ""}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M3 12a9 9 0 0 1 15.54-6.36" />
+      <path d="M18.54 3.64v4.92h-4.9" />
+      <path d="M21 12a9 9 0 0 1-15.54 6.36" />
+      <path d="M5.46 20.36v-4.92h4.9" />
+    </svg>
+  );
+}
+
 function SettingsIcon() {
   return (
     <svg className="iconGlyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -38,6 +54,8 @@ export function AppTopBar({
   onRefresh,
   refreshing,
 }: AppTopBarProps) {
+  const checking = checkingUpdate || installingUpdate;
+
   return (
     <header className="topbar">
       <div>
@@ -49,11 +67,13 @@ export function AppTopBar({
       </div>
       <div className="topActions">
         <button
-          className="ghost"
+          className="iconButton ghost"
           onClick={onCheckUpdate}
-          disabled={checkingUpdate || installingUpdate}
+          disabled={checking}
+          title={checking ? "检查更新中..." : "检查更新"}
+          aria-label={checking ? "检查更新中" : "检查更新"}
         >
-          {checkingUpdate ? "检查中..." : "检查更新"}
+          <UpdateIcon spinning={checking} />
         </button>
         <button
           className="iconButton primary"

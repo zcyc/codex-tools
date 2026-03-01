@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { EditorMultiSelect } from "./EditorMultiSelect";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { SwitchField } from "./SwitchField";
@@ -50,7 +51,7 @@ export function SettingsPanel({
     return null;
   }
 
-  return (
+  return createPortal(
     <div className="settingsOverlay" onClick={onClose}>
       <section
         className="settingsDialog"
@@ -175,6 +176,7 @@ export function SettingsPanel({
           <ThemeSwitch themeMode={themeMode} onToggle={onToggleTheme} />
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

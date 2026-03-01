@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import type { PendingUpdateInfo } from "../types/app";
 
 type UpdateBannerProps = {
@@ -23,7 +24,7 @@ export function UpdateBanner({
     return null;
   }
 
-  return (
+  return createPortal(
     <div className="updateOverlay" onClick={onClose}>
       <section
         className="updateDialog"
@@ -62,6 +63,7 @@ export function UpdateBanner({
         {updateProgress && <p className="updateProgress">{updateProgress}</p>}
         {pendingUpdate.body && <p className="updateBody">{pendingUpdate.body}</p>}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

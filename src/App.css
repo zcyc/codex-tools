@@ -200,25 +200,25 @@
 
 .topActions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 8px;
   justify-content: flex-end;
   align-items: center;
 }
 
 .iconButton {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .iconGlyph {
-  width: 20px;
-  height: 20px;
+  width: 21px;
+  height: 21px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
@@ -559,59 +559,74 @@ button.danger {
 }
 
 .metaStrip {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.metaStrip > div {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
-  background: var(--meta-bg);
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: linear-gradient(130deg, var(--meta-bg), rgba(255, 255, 255, 0.48));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.52);
 }
 
-.metaStrip span {
-  display: block;
+.metaPill span {
   color: var(--subtle);
-  font: 500 0.77rem/1 "IBM Plex Sans", sans-serif;
+  font: 600 0.72rem/1 "IBM Plex Sans", sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
-.metaStrip strong {
-  margin-top: 7px;
-  display: block;
+.metaPill strong {
   word-break: break-all;
-  font: 600 0.94rem/1.3 "IBM Plex Mono", monospace;
+  font: 700 0.9rem/1 "IBM Plex Mono", monospace;
 }
 
-.importBox {
+.importBar {
   margin-top: 16px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--import-bg);
-  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(130deg, var(--import-bg), rgba(255, 255, 255, 0.46));
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
 }
 
-.importBox h2 {
+.importInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.importInfo h2 {
   margin: 0;
-  font: 400 1.55rem/1 "Bebas Neue", sans-serif;
-  letter-spacing: 0.04em;
+  font: 700 1rem/1.2 "IBM Plex Sans", sans-serif;
+  letter-spacing: 0.02em;
 }
 
-.importBox p {
-  margin: 8px 0 0;
+.importInfo p {
+  margin: 0;
   color: var(--subtle);
-  font: 400 0.9rem/1.45 "IBM Plex Sans", sans-serif;
+  font: 500 0.82rem/1.35 "IBM Plex Sans", sans-serif;
 }
 
 .importRow {
-  margin-top: 12px;
   display: flex;
   gap: 10px;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.importHint {
+  grid-column: 1 / -1;
+  margin-top: -2px;
 }
 
 .hint {
@@ -621,11 +636,18 @@ button.danger {
 }
 
 .notice {
-  margin-top: 12px;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 45;
+  width: min(520px, calc(100vw - 40px));
   border-radius: 12px;
   padding: 10px 13px;
-  font: 500 0.86rem/1.35 "IBM Plex Sans", sans-serif;
+  font: 500 0.84rem/1.35 "IBM Plex Sans", sans-serif;
   border: 1px solid transparent;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 12px 24px rgba(18, 36, 62, 0.18);
+  animation: riseIn 180ms ease both;
 }
 
 .notice.ok {
@@ -697,7 +719,7 @@ button.danger {
 .cards {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
 
@@ -721,10 +743,10 @@ button.danger {
 }
 
 .accountCard {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(73, 102, 141, 0.18);
   border-radius: 16px;
-  padding: 18px 14px 14px;
-  background: var(--card);
+  padding: 16px 14px 14px;
+  background: linear-gradient(150deg, var(--card), rgba(255, 255, 255, 0.42));
   box-shadow: var(--card-shadow);
   animation: riseIn 320ms ease both;
   position: relative;
@@ -831,7 +853,7 @@ button.danger {
   align-items: flex-start;
   justify-content: flex-start;
   gap: 10px;
-  padding-top: 52px;
+  padding-top: 50px;
 }
 
 .cardHead h3 {
@@ -842,13 +864,6 @@ button.danger {
 .cardHead h3.nameCurrent {
   color: var(--name-current);
   text-shadow: 0 0 24px var(--name-current-glow);
-}
-
-.cardHead p {
-  margin: 4px 0 0;
-  color: var(--subtle);
-  font: 400 0.78rem/1.3 "IBM Plex Mono", monospace;
-  word-break: break-all;
 }
 
 .usageRow {
@@ -921,13 +936,42 @@ button.danger {
 }
 
 .cardActions {
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
+  margin-top: 14px;
+  display: block;
 }
 
 .cardActions button {
-  flex: 1;
+  width: 100%;
+}
+
+.cardPrimaryAction {
+  border-color: rgba(226, 136, 53, 0.56);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.48);
+}
+
+.cardDangerAction {
+  border-color: rgba(214, 126, 137, 0.46);
+  background: rgba(242, 106, 119, 0.06);
+  color: var(--error-text);
+}
+
+.cardDeleteIcon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  padding: 0;
+  z-index: 2;
+  border-color: rgba(214, 126, 137, 0.42);
+  background: rgba(242, 106, 119, 0.06);
+  color: var(--error-text);
+}
+
+.cardDeleteIcon .iconGlyph {
+  width: 16px;
+  height: 16px;
 }
 
 @keyframes riseIn {
@@ -978,6 +1022,7 @@ button.danger {
 
   .topActions {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .settingsOverlay {
@@ -1000,10 +1045,6 @@ button.danger {
     padding: 12px;
   }
 
-  .metaStrip {
-    grid-template-columns: 1fr;
-  }
-
   .settingsHeader {
     flex-direction: column;
   }
@@ -1020,6 +1061,12 @@ button.danger {
   }
 
   .importRow {
-    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .notice {
+    bottom: 14px;
+    right: 14px;
+    width: calc(100vw - 28px);
   }
 }

@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import type { Notice } from "../types/app";
 
 type NoticeBannerProps = {
@@ -9,5 +10,10 @@ export function NoticeBanner({ notice }: NoticeBannerProps) {
     return null;
   }
 
-  return <div className={`notice ${notice.type}`}>{notice.message}</div>;
+  return createPortal(
+    <div className={`notice ${notice.type}`} role="status" aria-live="polite">
+      {notice.message}
+    </div>,
+    document.body,
+  );
 }
