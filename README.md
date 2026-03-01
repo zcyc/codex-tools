@@ -7,6 +7,10 @@
 
 仓库地址：<https://github.com/170-carry/codex-tools>
 
+## 更新日志
+
+- v0.2.1：优化整体启动方式。
+
 ## 应用截图
 
 ![Codex Tools Screenshot](public/ScreenShot.png)

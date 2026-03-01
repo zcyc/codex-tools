@@ -18,6 +18,7 @@ const ADD_FLOW_POLL_MS = 2_500;
 const DEFAULT_SETTINGS: AppSettings = {
   launchAtStartup: false,
   trayUsageDisplayMode: "remaining",
+  launchCodexAfterSwitch: true,
 };
 
 export function useCodexController() {
@@ -315,10 +316,13 @@ export function useCodexController() {
         const result = await invoke<SwitchAccountResult>("switch_account_and_launch", {
           id: account.id,
           workspacePath: null,
+          launchCodex: settings.launchCodexAfterSwitch,
         });
         await loadAccounts();
 
-        if (result.usedFallbackCli) {
+        if (!settings.launchCodexAfterSwitch) {
+          setNotice({ type: "ok", message: "账号已切换（未自动启动 Codex）。" });
+        } else if (result.usedFallbackCli) {
           setNotice({
             type: "info",
             message: "账号已切换。未找到本地 Codex.app，已尝试通过 codex app 启动。",
@@ -332,7 +336,7 @@ export function useCodexController() {
         setSwitchingId(null);
       }
     },
-    [loadAccounts],
+    [loadAccounts, settings.launchCodexAfterSwitch],
   );
 
   return {

@@ -120,10 +120,11 @@ pub(crate) enum TrayUsageDisplayMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub(crate) struct AppSettings {
     pub(crate) launch_at_startup: bool,
     pub(crate) tray_usage_display_mode: TrayUsageDisplayMode,
+    pub(crate) launch_codex_after_switch: bool,
 }
 
 impl Default for AppSettings {
@@ -131,6 +132,7 @@ impl Default for AppSettings {
         Self {
             launch_at_startup: false,
             tray_usage_display_mode: TrayUsageDisplayMode::Remaining,
+            launch_codex_after_switch: true,
         }
     }
 }
@@ -140,6 +142,7 @@ impl Default for AppSettings {
 pub(crate) struct AppSettingsPatch {
     pub(crate) launch_at_startup: Option<bool>,
     pub(crate) tray_usage_display_mode: Option<TrayUsageDisplayMode>,
+    pub(crate) launch_codex_after_switch: Option<bool>,
 }
 
 impl StoredAccount {

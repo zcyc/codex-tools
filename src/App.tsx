@@ -33,6 +33,7 @@ function App() {
     onDelete,
     onSwitch,
   } = useCodexController();
+  const switchActionLabel = settings.launchCodexAfterSwitch ? "切换并启动" : "切换账号";
 
   return (
     <div className="shell">
@@ -72,6 +73,7 @@ function App() {
           accounts={accounts}
           loading={loading}
           switchingId={switchingId}
+          switchActionLabel={switchActionLabel}
           onSwitch={(account) => void onSwitch(account)}
           onDelete={(account) => void onDelete(account)}
         />

@@ -12,11 +12,18 @@ import {
 type AccountCardProps = {
   account: AccountSummary;
   isSwitching: boolean;
+  switchActionLabel: string;
   onSwitch: (account: AccountSummary) => void;
   onDelete: (account: AccountSummary) => void;
 };
 
-export function AccountCard({ account, isSwitching, onSwitch, onDelete }: AccountCardProps) {
+export function AccountCard({
+  account,
+  isSwitching,
+  switchActionLabel,
+  onSwitch,
+  onDelete,
+}: AccountCardProps) {
   const usage = account.usage;
   const fiveHour = usage?.fiveHour ?? null;
   const oneWeek = usage?.oneWeek ?? null;
@@ -75,7 +82,7 @@ export function AccountCard({ account, isSwitching, onSwitch, onDelete }: Accoun
 
       <div className="cardActions">
         <button className="primary" onClick={() => onSwitch(account)} disabled={isSwitching}>
-          {isSwitching ? "切换中..." : "切换并启动"}
+          {isSwitching ? "切换中..." : switchActionLabel}
         </button>
         <button className="danger" onClick={() => onDelete(account)}>
           删除

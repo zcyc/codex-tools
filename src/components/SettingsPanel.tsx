@@ -74,6 +74,16 @@ export function SettingsPanel({
           disabled={savingSettings}
         />
 
+        <SwitchField
+          checked={settings.launchCodexAfterSwitch}
+          onChange={(checked) => onUpdateSettings({ launchCodexAfterSwitch: checked })}
+          label="切换后启动 Codex"
+          description="默认开启。关闭时仅切换账号，不自动拉起 Codex。"
+          checkedText="启动"
+          uncheckedText="仅切换"
+          disabled={savingSettings}
+        />
+
         <div className="settingRow">
           <div className="settingMeta">
             <strong>状态栏展示</strong>

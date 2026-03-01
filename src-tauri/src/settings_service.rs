@@ -37,6 +37,9 @@ pub(crate) async fn update_app_settings_internal(
         if let Some(value) = patch.tray_usage_display_mode {
             store.settings.tray_usage_display_mode = value;
         }
+        if let Some(value) = patch.launch_codex_after_switch {
+            store.settings.launch_codex_after_switch = value;
+        }
 
         let settings = store.settings.clone();
         save_store(app, &store)?;

@@ -5,6 +5,7 @@ type AccountsGridProps = {
   accounts: AccountSummary[];
   loading: boolean;
   switchingId: string | null;
+  switchActionLabel: string;
   onSwitch: (account: AccountSummary) => void;
   onDelete: (account: AccountSummary) => void;
 };
@@ -13,6 +14,7 @@ export function AccountsGrid({
   accounts,
   loading,
   switchingId,
+  switchActionLabel,
   onSwitch,
   onDelete,
 }: AccountsGridProps) {
@@ -30,6 +32,7 @@ export function AccountsGrid({
           key={account.id}
           account={account}
           isSwitching={switchingId === account.id}
+          switchActionLabel={switchActionLabel}
           onSwitch={onSwitch}
           onDelete={onDelete}
         />

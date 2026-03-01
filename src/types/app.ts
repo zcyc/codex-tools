@@ -71,4 +71,5 @@ export type TrayUsageDisplayMode = "remaining" | "used";
 export type AppSettings = {
   launchAtStartup: boolean;
   trayUsageDisplayMode: TrayUsageDisplayMode;
+  launchCodexAfterSwitch: boolean;
 };

@@ -11,6 +11,8 @@ mod utils;
 
 use std::process::Command;
 use std::process::Stdio;
+use std::thread;
+use std::time::Duration;
 
 use tauri::AppHandle;
 use tauri::State;
@@ -147,6 +149,7 @@ async fn switch_account_and_launch(
     state: State<'_, AppState>,
     id: String,
     workspace_path: Option<String>,
+    launch_codex: Option<bool>,
 ) -> Result<SwitchAccountResult, String> {
     let store = {
         let _guard = state.store_lock.lock().await;
@@ -163,8 +166,20 @@ async fn switch_account_and_launch(
     auth::write_active_codex_auth(&account.auth_json)?;
     let _ = tray::refresh_macos_tray_snapshot(&app);
 
+    // 向后兼容：旧前端未传参数时仍按“切换并启动”处理。
+    let should_launch_codex = launch_codex.unwrap_or(true);
+    if !should_launch_codex {
+        return Ok(SwitchAccountResult {
+            account_id: account.account_id,
+            launched_app_path: None,
+            used_fallback_cli: false,
+        });
+    }
+
+    // 切换时强制结束旧实例，避免触发“是否退出”确认弹窗。
+    force_stop_running_codex();
+
     if let Some(path) = cli::find_codex_app_path() {
-        let _ = Command::new("pkill").args(["-x", "Codex"]).status();
         let mut cmd = Command::new("open");
         cmd.arg("-na").arg(&path);
         if let Some(workspace) = workspace_path.as_deref() {
@@ -197,6 +212,31 @@ async fn switch_account_and_launch(
         launched_app_path: None,
         used_fallback_cli: true,
     })
+}
+
+fn force_stop_running_codex() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("pkill").args(["-9", "-x", "Codex"]).status();
+        let _ = Command::new("pkill")
+            .args(["-9", "-x", "Codex Desktop"])
+            .status();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/F", "/IM", "Codex.exe", "/T"])
+            .status();
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = Command::new("pkill").args(["-9", "-x", "Codex"]).status();
+    }
+
+    // 等待进程树收敛，避免新实例拉起时与旧实例短暂重叠。
+    thread::sleep(Duration::from_millis(220));
 }
 
 // ===== App Bootstrap =====
