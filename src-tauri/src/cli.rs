@@ -63,6 +63,7 @@ pub(crate) fn find_codex_app_path() -> Option<PathBuf> {
 fn find_codex_cli_path() -> Option<PathBuf> {
     let mut candidates = codex_cli_candidates();
     append_nvm_codex_candidates(&mut candidates);
+    append_macos_app_bundle_codex_candidates(&mut candidates);
 
     let mut seen = HashSet::new();
     for candidate in candidates {
@@ -135,6 +136,30 @@ fn append_nvm_codex_candidates(candidates: &mut Vec<PathBuf>) {
         push_codex_candidates_from_dir(candidates, &version_dir.join("bin"));
     }
 }
+
+#[cfg(target_os = "macos")]
+fn append_macos_app_bundle_codex_candidates(candidates: &mut Vec<PathBuf>) {
+    let mut app_paths = vec![
+        PathBuf::from("/Applications/Codex.app"),
+        PathBuf::from("/Applications/Codex Desktop.app"),
+    ];
+
+    if let Some(home) = dirs::home_dir() {
+        app_paths.push(home.join("Applications").join("Codex.app"));
+        app_paths.push(home.join("Applications").join("Codex Desktop.app"));
+    }
+
+    if let Some(found) = find_codex_app_path() {
+        app_paths.push(found);
+    }
+
+    for app_path in app_paths {
+        candidates.push(app_path.join("Contents").join("Resources").join("codex"));
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn append_macos_app_bundle_codex_candidates(_candidates: &mut Vec<PathBuf>) {}
 
 fn push_codex_candidates_from_dir(candidates: &mut Vec<PathBuf>, dir: &Path) {
     #[cfg(windows)]
