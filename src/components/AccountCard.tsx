@@ -12,6 +12,7 @@ import {
 type AccountCardProps = {
   account: AccountSummary;
   isSwitching: boolean;
+  isDeletePending: boolean;
   switchActionLabel: string;
   onSwitch: (account: AccountSummary) => void;
   onDelete: (account: AccountSummary) => void;
@@ -20,6 +21,7 @@ type AccountCardProps = {
 export function AccountCard({
   account,
   isSwitching,
+  isDeletePending,
   switchActionLabel,
   onSwitch,
   onDelete,
@@ -27,7 +29,7 @@ export function AccountCard({
   const usage = account.usage;
   const fiveHour = usage?.fiveHour ?? null;
   const oneWeek = usage?.oneWeek ?? null;
-  const normalizedPlan = usage?.planType || account.planType;
+  const normalizedPlan = account.planType || usage?.planType;
   const planLabel = formatPlan(normalizedPlan);
   const tone = planTone(normalizedPlan);
 
@@ -38,10 +40,10 @@ export function AccountCard({
         {account.isCurrent && <span className="stamp stampCurrent">当前</span>}
       </div>
       <button
-        className="cardDeleteIcon"
+        className={`cardDeleteIcon ${isDeletePending ? "isPending" : ""}`}
         onClick={() => onDelete(account)}
-        aria-label="删除账号"
-        title="删除账号"
+        aria-label={isDeletePending ? "再次点击确认删除账号" : "删除账号"}
+        title={isDeletePending ? "再次点击确认删除" : "删除账号"}
       >
         <svg className="iconGlyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M3 6h18" />

@@ -44,6 +44,7 @@ export function useCodexController() {
   const [startingAdd, setStartingAdd] = useState(false);
   const [addFlow, setAddFlow] = useState<AddFlow | null>(null);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function useCodexController() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [installedEditorApps, setInstalledEditorApps] = useState<InstalledEditorApp[]>([]);
   const installingUpdateRef = useRef(false);
+  const deleteConfirmTimerRef = useRef<number | null>(null);
   const settingsUpdateQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const currentCount = useMemo(
@@ -118,7 +120,9 @@ export function useCodexController() {
       if (!quiet) {
         setRefreshing(true);
       }
-      const data = await invoke<AccountSummary[]>("refresh_all_usage");
+      const data = await invoke<AccountSummary[]>("refresh_all_usage", {
+        forceAuthRefresh: !quiet,
+      });
       setAccounts(data);
       if (!quiet) {
         setNotice({ type: "ok", message: "用量已刷新" });
@@ -158,6 +162,16 @@ export function useCodexController() {
       window.clearTimeout(timer);
     };
   }, [notice]);
+
+  useEffect(
+    () => () => {
+      if (deleteConfirmTimerRef.current !== null) {
+        window.clearTimeout(deleteConfirmTimerRef.current);
+        deleteConfirmTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   const installPendingUpdate = useCallback(
     async (knownUpdate?: NonNullable<Awaited<ReturnType<typeof check>>>) => {
@@ -376,10 +390,6 @@ export function useCodexController() {
       setAddFlow({
         baselineFingerprint: baseline.fingerprint,
       });
-      setNotice({
-        type: "info",
-        message: "已打开登录授权流程，授权成功后将自动添加账号并刷新列表。",
-      });
     } catch (error) {
       setNotice({ type: "error", message: `无法启动登录流程：${String(error)}` });
     } finally {
@@ -390,13 +400,27 @@ export function useCodexController() {
   const onCancelAddFlow = useCallback(() => {
     setAddFlow(null);
     void restoreAuthAfterAddFlow();
-    setNotice({ type: "info", message: "已取消自动监听。" });
   }, [restoreAuthAfterAddFlow]);
 
   const onDelete = useCallback(async (account: AccountSummary) => {
-    if (!window.confirm(`确认删除账号 ${account.label} 吗？`)) {
+    if (pendingDeleteId !== account.id) {
+      setPendingDeleteId(account.id);
+      if (deleteConfirmTimerRef.current !== null) {
+        window.clearTimeout(deleteConfirmTimerRef.current);
+      }
+      deleteConfirmTimerRef.current = window.setTimeout(() => {
+        setPendingDeleteId((current) => (current === account.id ? null : current));
+        deleteConfirmTimerRef.current = null;
+      }, 5_000);
+      setNotice({ type: "info", message: `再次点击删除账号 ${account.label} 以确认。` });
       return;
     }
+
+    if (deleteConfirmTimerRef.current !== null) {
+      window.clearTimeout(deleteConfirmTimerRef.current);
+      deleteConfirmTimerRef.current = null;
+    }
+    setPendingDeleteId(null);
 
     try {
       await invoke<void>("delete_account", { id: account.id });
@@ -405,7 +429,7 @@ export function useCodexController() {
     } catch (error) {
       setNotice({ type: "error", message: `删除失败：${String(error)}` });
     }
-  }, []);
+  }, [pendingDeleteId]);
 
   const onSwitch = useCallback(
     async (account: AccountSummary) => {
@@ -491,6 +515,7 @@ export function useCodexController() {
     startingAdd,
     addFlow,
     switchingId,
+    pendingDeleteId,
     checkingUpdate,
     installingUpdate,
     updateProgress,

@@ -9,6 +9,7 @@ use std::time::UNIX_EPOCH;
 use crate::models::CurrentAuthStatus;
 use crate::models::ExtractedAuth;
 use crate::utils::set_private_permissions;
+use crate::utils::truncate_for_error;
 
 pub(crate) struct CodexOAuthTokens {
     pub(crate) access_token: String,
@@ -242,6 +243,88 @@ pub(crate) fn extract_codex_oauth_tokens(auth_json: &Value) -> Result<CodexOAuth
     })
 }
 
+/// 使用 auth.json 内的 refresh_token 刷新 ChatGPT OAuth 令牌。
+///
+/// 返回更新后的 auth.json（仅内存对象，不会自动写盘）。
+pub(crate) async fn refresh_chatgpt_auth_tokens(auth_json: &Value) -> Result<Value, String> {
+    let tokens = auth_json
+        .get("tokens")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "auth.json 缺少 tokens".to_string())?;
+
+    let refresh_token = tokens
+        .get("refresh_token")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "auth.json 缺少 refresh_token".to_string())?;
+    let id_token = tokens
+        .get("id_token")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "auth.json 缺少 id_token".to_string())?;
+
+    let claims = decode_jwt_payload(id_token)?;
+    let issuer = claims
+        .get("iss")
+        .and_then(Value::as_str)
+        .unwrap_or("https://auth.openai.com")
+        .trim_end_matches('/')
+        .to_string();
+    let token_url = format!("{issuer}/oauth/token");
+
+    let mut form_pairs: Vec<(&str, String)> = vec![
+        ("grant_type", "refresh_token".to_string()),
+        ("refresh_token", refresh_token.to_string()),
+    ];
+    if let Some(client_id) = extract_client_id_from_claims(&claims) {
+        form_pairs.push(("client_id", client_id));
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("codex-tools/0.1")
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let response = client
+        .post(&token_url)
+        .form(&form_pairs)
+        .send()
+        .await
+        .map_err(|e| format!("刷新登录令牌失败 {token_url}: {e}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "刷新登录令牌失败 {token_url} -> {status}: {}",
+            truncate_for_error(&body, 140)
+        ));
+    }
+
+    let refreshed: RefreshedTokenPayload = response
+        .json()
+        .await
+        .map_err(|e| format!("解析刷新令牌响应失败: {e}"))?;
+
+    let mut updated = auth_json.clone();
+    let root = updated
+        .as_object_mut()
+        .ok_or_else(|| "auth.json 结构异常（根节点不是对象）".to_string())?;
+    let tokens = root
+        .get_mut("tokens")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| "auth.json 缺少 tokens".to_string())?;
+
+    tokens.insert(
+        "access_token".to_string(),
+        Value::String(refreshed.access_token),
+    );
+    tokens.insert("id_token".to_string(), Value::String(refreshed.id_token));
+    if let Some(refresh_token) = refreshed.refresh_token {
+        tokens.insert("refresh_token".to_string(), Value::String(refresh_token));
+    }
+
+    Ok(updated)
+}
+
 fn codex_auth_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "无法读取 HOME 目录".to_string())?;
     Ok(home.join(".codex").join("auth.json"))
@@ -267,4 +350,34 @@ fn decode_jwt_payload(token: &str) -> Result<Value, String> {
         .map_err(|e| format!("解码 id_token 失败: {e}"))?;
 
     serde_json::from_slice(&decoded).map_err(|e| format!("解析 id_token payload 失败: {e}"))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RefreshedTokenPayload {
+    access_token: String,
+    id_token: String,
+    refresh_token: Option<String>,
+}
+
+fn extract_client_id_from_claims(claims: &Value) -> Option<String> {
+    let aud = claims.get("aud")?;
+    match aud {
+        Value::String(value) => {
+            if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            }
+        }
+        Value::Array(items) => items.iter().find_map(|item| {
+            item.as_str().and_then(|value| {
+                if value.is_empty() {
+                    None
+                } else {
+                    Some(value.to_string())
+                }
+            })
+        }),
+        _ => None,
+    }
 }

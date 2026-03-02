@@ -281,7 +281,7 @@ fn start_macos_tray_refresh_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             let state = app.state::<AppState>();
-            if let Ok(summaries) = refresh_all_usage_internal(&app, state.inner()).await {
+            if let Ok(summaries) = refresh_all_usage_internal(&app, state.inner(), false).await {
                 let _ = update_macos_tray_snapshot(&app, &summaries);
             }
             tokio::time::sleep(Duration::from_secs(REFRESH_INTERVAL_SECONDS)).await;
@@ -347,7 +347,8 @@ pub(crate) fn handle_status_bar_menu_event(app: &AppHandle, event: tauri::menu::
             let app_handle = app.clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
-                if let Ok(summaries) = refresh_all_usage_internal(&app_handle, state.inner()).await
+                if let Ok(summaries) =
+                    refresh_all_usage_internal(&app_handle, state.inner(), true).await
                 {
                     let _ = update_macos_tray_snapshot(&app_handle, &summaries);
                 }

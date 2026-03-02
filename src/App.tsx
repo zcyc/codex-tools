@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 import { AddAccountSection } from "./components/AddAccountSection";
+import { AddAccountDialog } from "./components/AddAccountDialog";
 import { AccountsGrid } from "./components/AccountsGrid";
 import { AppTopBar } from "./components/AppTopBar";
 import { MetaStrip } from "./components/MetaStrip";
@@ -20,6 +21,7 @@ function App() {
     startingAdd,
     addFlow,
     switchingId,
+    pendingDeleteId,
     checkingUpdate,
     installingUpdate,
     updateProgress,
@@ -73,7 +75,12 @@ function App() {
           startingAdd={startingAdd}
           addFlowActive={Boolean(addFlow)}
           onStartAddAccount={() => void onStartAddAccount()}
-          onCancelAddFlow={onCancelAddFlow}
+        />
+        <AddAccountDialog
+          open={startingAdd || Boolean(addFlow)}
+          startingAdd={startingAdd}
+          addFlowActive={Boolean(addFlow)}
+          onClose={onCancelAddFlow}
         />
 
         <NoticeBanner notice={notice} />
@@ -91,6 +98,7 @@ function App() {
           accounts={accounts}
           loading={loading}
           switchingId={switchingId}
+          pendingDeleteId={pendingDeleteId}
           switchActionLabel={switchActionLabel}
           onSwitch={(account) => void onSwitch(account)}
           onDelete={(account) => void onDelete(account)}

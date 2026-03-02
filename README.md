@@ -8,7 +8,9 @@
 仓库地址：<https://github.com/170-carry/codex-tools>
 
 ## 更新日志
-
+- v0.3.0
+  1. 修复关闭无效的问题
+  2. 优化弹窗样式
 - v0.2.7
   1. 增加 用量接口候选
   2. 修复 添加账号偶尔出现消失问题
@@ -35,6 +37,7 @@
 > https://zhuanlan.zhihu.com/p/135948430
 
 > 省流:
+
 > sudo spctl  --master-disable
 
 > sudo xattr -r -d com.apple.quarantine /Applications/Codex\ Tools.app

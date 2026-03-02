@@ -69,8 +69,14 @@ async fn delete_account(
 async fn refresh_all_usage(
     app: AppHandle,
     state: State<'_, AppState>,
+    force_auth_refresh: Option<bool>,
 ) -> Result<Vec<AccountSummary>, String> {
-    let summaries = account_service::refresh_all_usage_internal(&app, state.inner()).await?;
+    let summaries = account_service::refresh_all_usage_internal(
+        &app,
+        state.inner(),
+        force_auth_refresh.unwrap_or(false),
+    )
+    .await?;
     let _ = tray::update_macos_tray_snapshot(&app, &summaries);
     Ok(summaries)
 }
