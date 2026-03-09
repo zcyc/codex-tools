@@ -376,7 +376,8 @@ fn normalize_usage_error_message(raw_error: &str) -> String {
         return DEACTIVATED_WORKSPACE_NOTICE.to_string();
     }
     if normalized.contains("provided authentication token is expired")
-        || normalized.contains("your refresh token has already been used to generate a new access token")
+        || normalized
+            .contains("your refresh token has already been used to generate a new access token")
         || normalized.contains("please try signing in again")
         || normalized.contains("token is expired")
     {

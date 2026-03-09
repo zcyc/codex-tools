@@ -8,31 +8,51 @@ use crate::models::AppLocale;
 use crate::models::TrayUsageDisplayMode;
 use crate::store::load_store;
 
-static ZH_CN_MESSAGES: LazyLock<Value> =
-    LazyLock::new(|| parse_locale("zh-CN", include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../src/i18n/locales/zh-CN.json"
-    ))));
-static EN_US_MESSAGES: LazyLock<Value> =
-    LazyLock::new(|| parse_locale("en-US", include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../src/i18n/locales/en-US.json"
-    ))));
-static JA_JP_MESSAGES: LazyLock<Value> =
-    LazyLock::new(|| parse_locale("ja-JP", include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../src/i18n/locales/ja-JP.json"
-    ))));
-static KO_KR_MESSAGES: LazyLock<Value> =
-    LazyLock::new(|| parse_locale("ko-KR", include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../src/i18n/locales/ko-KR.json"
-    ))));
-static RU_RU_MESSAGES: LazyLock<Value> =
-    LazyLock::new(|| parse_locale("ru-RU", include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../src/i18n/locales/ru-RU.json"
-    ))));
+static ZH_CN_MESSAGES: LazyLock<Value> = LazyLock::new(|| {
+    parse_locale(
+        "zh-CN",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/i18n/locales/zh-CN.json"
+        )),
+    )
+});
+static EN_US_MESSAGES: LazyLock<Value> = LazyLock::new(|| {
+    parse_locale(
+        "en-US",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/i18n/locales/en-US.json"
+        )),
+    )
+});
+static JA_JP_MESSAGES: LazyLock<Value> = LazyLock::new(|| {
+    parse_locale(
+        "ja-JP",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/i18n/locales/ja-JP.json"
+        )),
+    )
+});
+static KO_KR_MESSAGES: LazyLock<Value> = LazyLock::new(|| {
+    parse_locale(
+        "ko-KR",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/i18n/locales/ko-KR.json"
+        )),
+    )
+});
+static RU_RU_MESSAGES: LazyLock<Value> = LazyLock::new(|| {
+    parse_locale(
+        "ru-RU",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/i18n/locales/ru-RU.json"
+        )),
+    )
+});
 
 fn parse_locale(code: &str, raw: &str) -> Value {
     serde_json::from_str(raw).unwrap_or_else(|error| {

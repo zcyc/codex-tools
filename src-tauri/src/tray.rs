@@ -154,7 +154,10 @@ fn build_macos_tray_tooltip(
 
     lines.push(i18n::tray_all_accounts(locale, accounts.len()));
     for account in accounts.iter().take(8) {
-        lines.push(format!("• {}", tray_account_usage_line(account, mode, locale)));
+        lines.push(format!(
+            "• {}",
+            tray_account_usage_line(account, mode, locale)
+        ));
     }
     if accounts.len() > 8 {
         lines.push(i18n::tray_more_accounts(locale, accounts.len() - 8));
@@ -263,8 +266,14 @@ fn build_macos_tray_menu(
         None::<&str>,
     )
     .map_err(|e| format!("创建状态栏菜单项失败: {e}"))?;
-    let quit = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, i18n::tray_quit(locale), true, None::<&str>)
-        .map_err(|e| format!("创建状态栏菜单项失败: {e}"))?;
+    let quit = MenuItem::with_id(
+        app,
+        TRAY_MENU_QUIT_ID,
+        i18n::tray_quit(locale),
+        true,
+        None::<&str>,
+    )
+    .map_err(|e| format!("创建状态栏菜单项失败: {e}"))?;
 
     menu.append(&refresh)
         .map_err(|e| format!("写入状态栏菜单失败: {e}"))?;

@@ -55,11 +55,11 @@ use crate::utils::truncate_for_error;
 
 const DEFAULT_PROXY_PORT: u16 = 8787;
 const CODEX_CLIENT_VERSION: &str = "0.101.0";
-const CODEX_USER_AGENT: &str =
-    "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464";
+const CODEX_USER_AGENT: &str = "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464";
 const SSE_DONE: &str = "data: [DONE]\n\n";
 const MODELS: &[&str] = &[
     "gpt-5",
+    "gpt-5.4",
     "gpt-5-mini",
     "gpt-5-codex",
     "gpt-5-codex-mini",
@@ -70,6 +70,10 @@ const MODELS: &[&str] = &[
     "gpt-5.3-codex",
     "gpt-5.3-codex-spark",
 ];
+const REQUEST_MODEL_MAPPINGS: &[(&str, &str)] = &[("gpt-5-4", "gpt-5.4")];
+const CLIENT_MODEL_REJECTIONS: &[(&str, &str)] = &[("gpt5.4", "gpt-5-4"), ("gpt-5.4", "gpt-5-4")];
+const RESPONSE_MODEL_NORMALIZATIONS: &[(&str, &str)] =
+    &[("gpt5.4", "gpt-5.4"), ("gpt-5-4", "gpt-5.4")];
 
 #[derive(Clone)]
 pub(crate) struct ProxyStorageContext {
@@ -183,7 +187,10 @@ pub(crate) async fn get_api_proxy_status_with_runtime(
 
     match handle_state {
         Some(handle_state) => Ok(status_from_handle_state(handle_state).await),
-        None => Ok(stopped_status(read_persisted_api_proxy_key(storage).await?, None)),
+        None => Ok(stopped_status(
+            read_persisted_api_proxy_key(storage).await?,
+            None,
+        )),
     }
 }
 
@@ -308,7 +315,10 @@ pub(crate) async fn stop_api_proxy_with_runtime(
     };
 
     let Some(mut handle) = handle else {
-        return Ok(stopped_status(read_persisted_api_proxy_key(storage).await?, None));
+        return Ok(stopped_status(
+            read_persisted_api_proxy_key(storage).await?,
+            None,
+        ));
     };
 
     if let Some(shutdown_tx) = handle.shutdown_tx.take() {
@@ -399,15 +409,17 @@ async fn chat_completions_handler(
         Err(response) => return response,
     };
 
-    let (upstream_payload, downstream_stream) = match convert_openai_chat_request_to_codex(&request_json) {
-        Ok(value) => value,
-        Err(message) => return invalid_request_response(&message),
-    };
+    let (upstream_payload, downstream_stream) =
+        match convert_openai_chat_request_to_codex(&request_json) {
+            Ok(value) => value,
+            Err(message) => return invalid_request_response(&message),
+        };
 
-    let upstream = match send_codex_request_over_candidates(&context, &headers, &upstream_payload).await {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let upstream =
+        match send_codex_request_over_candidates(&context, &headers, &upstream_payload).await {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
 
     let (candidate, upstream_response) = upstream;
     update_proxy_target(&context, &candidate).await;
@@ -434,14 +446,15 @@ async fn chat_completions_handler(
             }
         };
 
-        let body = match serde_json::to_vec(&convert_completed_response_to_chat_completion(&completed)) {
-            Ok(bytes) => Bytes::from(bytes),
-            Err(error) => {
-                let message = format!("序列化聊天响应失败: {error}");
-                update_proxy_error(&context, Some(message.clone())).await;
-                return json_error_response(StatusCode::BAD_GATEWAY, &message);
-            }
-        };
+        let body =
+            match serde_json::to_vec(&convert_completed_response_to_chat_completion(&completed)) {
+                Ok(bytes) => Bytes::from(bytes),
+                Err(error) => {
+                    let message = format!("序列化聊天响应失败: {error}");
+                    update_proxy_error(&context, Some(message.clone())).await;
+                    return json_error_response(StatusCode::BAD_GATEWAY, &message);
+                }
+            };
 
         build_json_proxy_response(StatusCode::OK, &upstream_headers, body)
     }
@@ -461,15 +474,17 @@ async fn responses_handler(
         Err(response) => return response,
     };
 
-    let (upstream_payload, downstream_stream) = match normalize_openai_responses_request(request_json) {
-        Ok(value) => value,
-        Err(message) => return invalid_request_response(&message),
-    };
+    let (upstream_payload, downstream_stream) =
+        match normalize_openai_responses_request(request_json) {
+            Ok(value) => value,
+            Err(message) => return invalid_request_response(&message),
+        };
 
-    let upstream = match send_codex_request_over_candidates(&context, &headers, &upstream_payload).await {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let upstream =
+        match send_codex_request_over_candidates(&context, &headers, &upstream_payload).await {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
 
     let (candidate, upstream_response) = upstream;
     update_proxy_target(&context, &candidate).await;
@@ -496,6 +511,7 @@ async fn responses_handler(
             }
         };
 
+        let completed = rewrite_response_models_for_client(completed);
         let body = match serde_json::to_vec(&completed) {
             Ok(bytes) => Bytes::from(bytes),
             Err(error) => {
@@ -544,9 +560,8 @@ fn ensure_authorized(headers: &HeaderMap, api_key: &Arc<RwLock<String>>) -> Opti
 }
 
 fn parse_json_request(body: &Bytes) -> Result<Value, Response<Body>> {
-    serde_json::from_slice::<Value>(body).map_err(|error| {
-        invalid_request_response(&format!("请求体不是合法 JSON: {error}"))
-    })
+    serde_json::from_slice::<Value>(body)
+        .map_err(|error| invalid_request_response(&format!("请求体不是合法 JSON: {error}")))
 }
 
 fn invalid_request_response(message: &str) -> Response<Body> {
@@ -566,7 +581,7 @@ fn convert_openai_chat_request_to_codex(request: &Value) -> Result<(Value, bool)
         .as_object()
         .ok_or_else(|| "聊天请求必须是 JSON 对象".to_string())?;
 
-    let model = required_string(request_object, "model")?;
+    let model = map_client_model_to_upstream(&required_string(request_object, "model")?)?;
     let messages = request_object
         .get("messages")
         .and_then(Value::as_array)
@@ -667,7 +682,8 @@ fn convert_openai_chat_request_to_codex(request: &Value) -> Result<(Value, bool)
                         continue;
                     }
 
-                    let function = match tool_call_object.get("function").and_then(Value::as_object) {
+                    let function = match tool_call_object.get("function").and_then(Value::as_object)
+                    {
                         Some(value) => value,
                         None => continue,
                     };
@@ -700,13 +716,19 @@ fn convert_openai_chat_request_to_codex(request: &Value) -> Result<(Value, bool)
                 Some(value) => value,
                 None => continue,
             };
-            match tool_object.get("type").and_then(Value::as_str).unwrap_or_default() {
+            match tool_object
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+            {
                 "function" => {
-                    let Some(function) = tool_object.get("function").and_then(Value::as_object) else {
+                    let Some(function) = tool_object.get("function").and_then(Value::as_object)
+                    else {
                         continue;
                     };
                     let mut converted_tool = Map::new();
-                    converted_tool.insert("type".to_string(), Value::String("function".to_string()));
+                    converted_tool
+                        .insert("type".to_string(), Value::String("function".to_string()));
                     if let Some(name) = function.get("name").and_then(Value::as_str) {
                         converted_tool.insert("name".to_string(), Value::String(name.to_string()));
                     }
@@ -749,12 +771,13 @@ fn normalize_openai_responses_request(mut request: Value) -> Result<(Value, bool
         .as_object_mut()
         .ok_or_else(|| "responses 请求必须是 JSON 对象".to_string())?;
 
-    let _model = required_string(object, "model")?;
+    let model = map_client_model_to_upstream(&required_string(object, "model")?)?;
     let downstream_stream = object
         .get("stream")
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    object.insert("model".to_string(), Value::String(model));
     object.insert("stream".to_string(), Value::Bool(true));
     object.insert("store".to_string(), Value::Bool(false));
     if !object.contains_key("instructions") {
@@ -798,6 +821,63 @@ fn normalize_openai_responses_request(mut request: Value) -> Result<(Value, bool
     }
 
     Ok((request, downstream_stream))
+}
+
+fn map_client_model_to_upstream(model: &str) -> Result<String, String> {
+    if let Some(mapped) = remap_model_name(model, REQUEST_MODEL_MAPPINGS) {
+        return Ok(mapped);
+    }
+    if let Some(suggested) = remap_model_name(model, CLIENT_MODEL_REJECTIONS) {
+        return Err(format!("模型 {model} 不支持，请改用 {suggested}"));
+    }
+
+    Ok(model.to_string())
+}
+
+fn normalize_model_for_client(model: &str) -> String {
+    remap_model_name(model, RESPONSE_MODEL_NORMALIZATIONS).unwrap_or_else(|| model.to_string())
+}
+
+fn remap_model_name(model: &str, mappings: &[(&str, &str)]) -> Option<String> {
+    for (from, to) in mappings {
+        if model == *from {
+            return Some((*to).to_string());
+        }
+        if let Some(rest) = model.strip_prefix(from) {
+            if rest.starts_with('-') {
+                return Some(format!("{to}{rest}"));
+            }
+        }
+    }
+
+    None
+}
+
+fn rewrite_response_models_for_client(mut value: Value) -> Value {
+    remap_model_fields_to_client(&mut value);
+    value
+}
+
+fn remap_model_fields_to_client(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, item) in object.iter_mut() {
+                if key == "model" {
+                    if let Some(model) = item.as_str() {
+                        *item = Value::String(normalize_model_for_client(model));
+                    }
+                    continue;
+                }
+                remap_model_fields_to_client(item);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                remap_model_fields_to_client(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn required_string(object: &Map<String, Value>, key: &str) -> Result<String, String> {
@@ -860,19 +940,31 @@ fn convert_message_content_to_codex_parts(role: &str, content: &Value) -> Vec<Va
                         }
                     }
                     "file" if role == "user" || role == "developer" || role == "system" => {
-                        let Some(file_object) = item_object.get("file").and_then(Value::as_object) else {
+                        let Some(file_object) = item_object.get("file").and_then(Value::as_object)
+                        else {
                             continue;
                         };
                         let mut file_part = Map::new();
-                        file_part.insert("type".to_string(), Value::String("input_file".to_string()));
-                        if let Some(file_data) = file_object.get("file_data").and_then(Value::as_str) {
-                            file_part.insert("file_data".to_string(), Value::String(file_data.to_string()));
+                        file_part
+                            .insert("type".to_string(), Value::String("input_file".to_string()));
+                        if let Some(file_data) =
+                            file_object.get("file_data").and_then(Value::as_str)
+                        {
+                            file_part.insert(
+                                "file_data".to_string(),
+                                Value::String(file_data.to_string()),
+                            );
                         }
                         if let Some(file_id) = file_object.get("file_id").and_then(Value::as_str) {
-                            file_part.insert("file_id".to_string(), Value::String(file_id.to_string()));
+                            file_part
+                                .insert("file_id".to_string(), Value::String(file_id.to_string()));
                         }
-                        if let Some(filename) = file_object.get("filename").and_then(Value::as_str) {
-                            file_part.insert("filename".to_string(), Value::String(filename.to_string()));
+                        if let Some(filename) = file_object.get("filename").and_then(Value::as_str)
+                        {
+                            file_part.insert(
+                                "filename".to_string(),
+                                Value::String(filename.to_string()),
+                            );
                         }
                         parts.push(Value::Object(file_part));
                     }
@@ -946,12 +1038,10 @@ fn map_response_format(root: &mut Map<String, Value>, response_format: &Value) {
             format_object.insert("type".to_string(), Value::String("text".to_string()));
         }
         "json_schema" => {
-            format_object.insert(
-                "type".to_string(),
-                Value::String("json_schema".to_string()),
-            );
-            if let Some(schema_object) =
-                response_format_object.get("json_schema").and_then(Value::as_object)
+            format_object.insert("type".to_string(), Value::String("json_schema".to_string()));
+            if let Some(schema_object) = response_format_object
+                .get("json_schema")
+                .and_then(Value::as_object)
             {
                 if let Some(name) = schema_object.get("name") {
                     format_object.insert("name".to_string(), name.clone());
@@ -1013,20 +1103,16 @@ async fn send_codex_request_over_candidates(
         let mut did_refresh = false;
 
         loop {
-            let upstream = match forward_codex_request_with_candidate(
-                context,
-                &candidate,
-                headers,
-                payload,
-            )
-            .await
-            {
-                Ok(response) => response,
-                Err(error) => {
-                    attempt_errors.push(format!("{}: {}", candidate.label, error));
-                    break;
-                }
-            };
+            let upstream =
+                match forward_codex_request_with_candidate(context, &candidate, headers, payload)
+                    .await
+                {
+                    Ok(response) => response,
+                    Err(error) => {
+                        attempt_errors.push(format!("{}: {}", candidate.label, error));
+                        break;
+                    }
+                };
 
             let status = upstream.status();
             if status.is_success() {
@@ -1037,7 +1123,8 @@ async fn send_codex_request_over_candidates(
             let upstream_body = match upstream.bytes().await {
                 Ok(bytes) => bytes,
                 Err(error) => {
-                    attempt_errors.push(format!("{}: 读取上游响应失败: {}", candidate.label, error));
+                    attempt_errors
+                        .push(format!("{}: 读取上游响应失败: {}", candidate.label, error));
                     break;
                 }
             };
@@ -1050,7 +1137,8 @@ async fn send_codex_request_over_candidates(
                         continue;
                     }
                     Err(error) => {
-                        attempt_errors.push(format!("{}: 刷新登录态失败: {}", candidate.label, error));
+                        attempt_errors
+                            .push(format!("{}: 刷新登录态失败: {}", candidate.label, error));
                         break;
                     }
                 }
@@ -1062,7 +1150,11 @@ async fn send_codex_request_over_candidates(
             }
 
             update_proxy_error(context, None).await;
-            return Err(build_proxy_response(status, &upstream_headers, upstream_body));
+            return Err(build_proxy_response(
+                status,
+                &upstream_headers,
+                upstream_body,
+            ));
         }
     }
 
@@ -1121,7 +1213,10 @@ async fn forward_codex_request_with_candidate(
     context
         .client
         .post(&upstream_url)
-        .header("Authorization", format!("Bearer {}", candidate.access_token))
+        .header(
+            "Authorization",
+            format!("Bearer {}", candidate.access_token),
+        )
         .header("ChatGPT-Account-Id", &candidate.account_id)
         .header("Accept", "text/event-stream")
         .header("Content-Type", "application/json")
@@ -1136,7 +1231,9 @@ async fn forward_codex_request_with_candidate(
         .map_err(|error| format!("请求 Codex 上游失败 {upstream_url}: {error}"))
 }
 
-async fn load_proxy_candidates(storage: &ProxyStorageContext) -> Result<Vec<ProxyCandidate>, String> {
+async fn load_proxy_candidates(
+    storage: &ProxyStorageContext,
+) -> Result<Vec<ProxyCandidate>, String> {
     let _guard = storage.store_lock.lock().await;
     let store = load_store_from_path(&account_store_path_from_data_dir(&storage.data_dir))?;
 
@@ -1259,7 +1356,9 @@ async fn persist_refreshed_candidate_auth(
 
     save_store_to_path(&store_path, &store)?;
 
-    if storage.sync_active_auth_on_refresh && current_auth_account_id().as_deref() == Some(account_id) {
+    if storage.sync_active_auth_on_refresh
+        && current_auth_account_id().as_deref() == Some(account_id)
+    {
         write_active_codex_auth(refreshed_auth_json)?;
     }
 
@@ -1501,7 +1600,9 @@ fn is_authorized(headers: &HeaderMap, api_key: &str) -> bool {
     false
 }
 
-async fn read_persisted_api_proxy_key(storage: &ProxyStorageContext) -> Result<Option<String>, String> {
+async fn read_persisted_api_proxy_key(
+    storage: &ProxyStorageContext,
+) -> Result<Option<String>, String> {
     if let Some(value) = read_api_proxy_key_file(storage)? {
         return Ok(Some(value));
     }
@@ -1547,7 +1648,9 @@ async fn ensure_persisted_api_proxy_key(storage: &ProxyStorageContext) -> Result
     Ok(new_key)
 }
 
-async fn regenerate_persisted_api_proxy_key(storage: &ProxyStorageContext) -> Result<String, String> {
+async fn regenerate_persisted_api_proxy_key(
+    storage: &ProxyStorageContext,
+) -> Result<String, String> {
     let new_key = generate_api_proxy_key();
     write_api_proxy_key_file(storage, &new_key)?;
 
@@ -1617,17 +1720,14 @@ fn write_private_file_atomically(path: &Path, contents: &[u8]) -> Result<(), Str
             .write(true)
             .open(&temp_path)
             .map_err(|error| {
-                format!(
-                    "创建 API Key 临时文件失败 {}: {error}",
-                    temp_path.display()
-                )
+                format!("创建 API Key 临时文件失败 {}: {error}", temp_path.display())
             })?;
-        temp_file
-            .write_all(contents)
-            .map_err(|error| format!("写入 API Key 临时文件失败 {}: {error}", temp_path.display()))?;
-        temp_file
-            .sync_all()
-            .map_err(|error| format!("刷新 API Key 临时文件失败 {}: {error}", temp_path.display()))?;
+        temp_file.write_all(contents).map_err(|error| {
+            format!("写入 API Key 临时文件失败 {}: {error}", temp_path.display())
+        })?;
+        temp_file.sync_all().map_err(|error| {
+            format!("刷新 API Key 临时文件失败 {}: {error}", temp_path.display())
+        })?;
         drop(temp_file);
         set_private_permissions(&temp_path);
 
@@ -1641,21 +1741,19 @@ fn write_private_file_atomically(path: &Path, contents: &[u8]) -> Result<(), Str
                 )
             })?;
 
-            let parent_dir = fs::File::open(parent)
-                .map_err(|error| format!("打开 API Key 存储目录失败 {}: {error}", parent.display()))?;
-            parent_dir
-                .sync_all()
-                .map_err(|error| format!("刷新 API Key 存储目录失败 {}: {error}", parent.display()))?;
+            let parent_dir = fs::File::open(parent).map_err(|error| {
+                format!("打开 API Key 存储目录失败 {}: {error}", parent.display())
+            })?;
+            parent_dir.sync_all().map_err(|error| {
+                format!("刷新 API Key 存储目录失败 {}: {error}", parent.display())
+            })?;
         }
 
         #[cfg(not(target_family = "unix"))]
         {
             if path.exists() {
                 fs::remove_file(path).map_err(|error| {
-                    format!(
-                        "移除旧 API Key 存储文件失败 {}: {error}",
-                        path.display()
-                    )
+                    format!("移除旧 API Key 存储文件失败 {}: {error}", path.display())
                 })?;
             }
             fs::rename(&temp_path, path).map_err(|error| {
@@ -1679,10 +1777,7 @@ fn write_private_file_atomically(path: &Path, contents: &[u8]) -> Result<(), Str
 }
 
 fn read_current_api_key(shared: &Arc<RwLock<String>>) -> String {
-    shared
-        .read()
-        .map(|value| value.clone())
-        .unwrap_or_default()
+    shared.read().map(|value| value.clone()).unwrap_or_default()
 }
 
 fn should_forward_response_header(name: &str) -> bool {
@@ -1720,6 +1815,32 @@ fn build_json_proxy_response(
 
 fn build_passthrough_sse_response(upstream: reqwest::Response) -> Response<Body> {
     let upstream_headers = upstream.headers().clone();
+    let output = stream! {
+        let mut upstream = upstream;
+        let mut decoder = SseDecoder::default();
+
+        loop {
+            match upstream.chunk().await {
+                Ok(Some(chunk)) => {
+                    for event in decoder.push(&chunk) {
+                        yield Ok::<Bytes, Infallible>(serialize_sse_event(
+                            event.event.as_deref(),
+                            &rewrite_sse_event_data_models_for_client(&event.data),
+                        ));
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => return,
+            }
+        }
+
+        for event in decoder.finish() {
+            yield Ok::<Bytes, Infallible>(serialize_sse_event(
+                event.event.as_deref(),
+                &rewrite_sse_event_data_models_for_client(&event.data),
+            ));
+        }
+    };
     let mut response = Response::builder().status(StatusCode::OK);
     for (name, value) in &upstream_headers {
         if should_forward_response_header(name.as_str()) {
@@ -1730,7 +1851,7 @@ fn build_passthrough_sse_response(upstream: reqwest::Response) -> Response<Body>
     response
         .header("content-type", "text/event-stream; charset=utf-8")
         .header("cache-control", "no-cache")
-        .body(Body::from_stream(upstream.bytes_stream()))
+        .body(Body::from_stream(output))
         .unwrap_or_else(|_| json_error_response(StatusCode::BAD_GATEWAY, "构建流式代理响应失败"))
 }
 
@@ -1790,6 +1911,34 @@ fn sse_data_chunk(value: &Value) -> Bytes {
         "{\"error\":{\"message\":\"stream serialization failed\"}}".to_string()
     });
     Bytes::from(format!("data: {serialized}\n\n"))
+}
+
+fn rewrite_sse_event_data_models_for_client(data: &str) -> String {
+    let Ok(mut value) = serde_json::from_str::<Value>(data) else {
+        return data.to_string();
+    };
+    remap_model_fields_to_client(&mut value);
+    serde_json::to_string(&value).unwrap_or_else(|_| data.to_string())
+}
+
+fn serialize_sse_event(event: Option<&str>, data: &str) -> Bytes {
+    let mut serialized = String::new();
+    if let Some(event) = event.filter(|value| !value.is_empty()) {
+        serialized.push_str("event: ");
+        serialized.push_str(event);
+        serialized.push('\n');
+    }
+    if data.is_empty() {
+        serialized.push_str("data:\n");
+    } else {
+        for line in data.lines() {
+            serialized.push_str("data: ");
+            serialized.push_str(line);
+            serialized.push('\n');
+        }
+    }
+    serialized.push('\n');
+    Bytes::from(serialized)
 }
 
 fn extract_completed_response_from_sse(bytes: &[u8]) -> Result<Value, String> {
@@ -1852,8 +2001,11 @@ fn convert_completed_response_to_chat_completion(response: &Value) -> Value {
                 "reasoning" => {
                     if let Some(summary) = item_object.get("summary").and_then(Value::as_array) {
                         for summary_item in summary {
-                            if summary_item.get("type").and_then(Value::as_str) == Some("summary_text") {
-                                if let Some(text) = summary_item.get("text").and_then(Value::as_str) {
+                            if summary_item.get("type").and_then(Value::as_str)
+                                == Some("summary_text")
+                            {
+                                if let Some(text) = summary_item.get("text").and_then(Value::as_str)
+                                {
                                     if !text.trim().is_empty() {
                                         reasoning_content = Some(text.to_string());
                                         break;
@@ -1870,8 +2022,12 @@ fn convert_completed_response_to_chat_completion(response: &Value) -> Value {
                             let Some(content_object) = content_item.as_object() else {
                                 continue;
                             };
-                            if content_object.get("type").and_then(Value::as_str) == Some("output_text") {
-                                if let Some(text) = content_object.get("text").and_then(Value::as_str) {
+                            if content_object.get("type").and_then(Value::as_str)
+                                == Some("output_text")
+                            {
+                                if let Some(text) =
+                                    content_object.get("text").and_then(Value::as_str)
+                                {
                                     if !text.is_empty() {
                                         collected.push(text.to_string());
                                     }
@@ -1900,9 +2056,7 @@ fn convert_completed_response_to_chat_completion(response: &Value) -> Value {
 
     message.insert(
         "content".to_string(),
-        text_content
-            .map(Value::String)
-            .unwrap_or(Value::Null),
+        text_content.map(Value::String).unwrap_or(Value::Null),
     );
     if let Some(reasoning) = reasoning_content {
         message.insert("reasoning_content".to_string(), Value::String(reasoning));
@@ -1911,7 +2065,11 @@ fn convert_completed_response_to_chat_completion(response: &Value) -> Value {
         message.insert("tool_calls".to_string(), Value::Array(tool_calls.clone()));
     }
 
-    let finish_reason = if tool_calls.is_empty() { "stop" } else { "tool_calls" };
+    let finish_reason = if tool_calls.is_empty() {
+        "stop"
+    } else {
+        "tool_calls"
+    };
     let mut root = Map::new();
     root.insert(
         "id".to_string(),
@@ -1935,7 +2093,8 @@ fn convert_completed_response_to_chat_completion(response: &Value) -> Value {
         "model".to_string(),
         response_object
             .get("model")
-            .cloned()
+            .and_then(Value::as_str)
+            .map(|model| Value::String(normalize_model_for_client(model)))
             .unwrap_or(Value::String(String::new())),
     );
     root.insert(
@@ -2012,8 +2171,8 @@ fn translate_sse_event_to_chat_chunk(event: &SseEvent, state: &mut ChatStreamSta
                 .get("response")
                 .and_then(|value| value.get("model"))
                 .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
+                .map(normalize_model_for_client)
+                .unwrap_or_default();
             Vec::new()
         }
         "response.reasoning_summary_text.delta" => parsed
@@ -2208,7 +2367,10 @@ fn build_chat_chunk(
             .unwrap_or(Value::Null),
     );
 
-    root.insert("choices".to_string(), Value::Array(vec![Value::Object(choice)]));
+    root.insert(
+        "choices".to_string(),
+        Value::Array(vec![Value::Object(choice)]),
+    );
     if let Some(usage) = usage {
         root.insert("usage".to_string(), build_openai_usage(usage));
     }
@@ -2236,7 +2398,11 @@ impl SseDecoder {
         let mut events = Vec::new();
         while let Some(boundary) = find_sse_boundary(&self.buffer) {
             let block = self.buffer.drain(..boundary).collect::<Vec<_>>();
-            let delimiter = if self.buffer.starts_with(b"\r\n\r\n") { 4 } else { 2 };
+            let delimiter = if self.buffer.starts_with(b"\r\n\r\n") {
+                4
+            } else {
+                2
+            };
             self.buffer.drain(..delimiter);
             if let Some(event) = parse_sse_event(&block) {
                 events.push(event);
@@ -2361,6 +2527,9 @@ mod tests {
     use super::convert_completed_response_to_chat_completion;
     use super::convert_openai_chat_request_to_codex;
     use super::extract_completed_response_from_sse;
+    use super::normalize_openai_responses_request;
+    use super::rewrite_response_models_for_client;
+    use super::rewrite_sse_event_data_models_for_client;
     use serde_json::json;
 
     #[test]
@@ -2378,9 +2547,18 @@ mod tests {
             convert_openai_chat_request_to_codex(&request).expect("payload should convert");
 
         assert!(!downstream_stream);
-        assert_eq!(payload.get("model").and_then(|value| value.as_str()), Some("gpt-5"));
-        assert_eq!(payload.get("stream").and_then(|value| value.as_bool()), Some(true));
-        assert_eq!(payload.get("store").and_then(|value| value.as_bool()), Some(false));
+        assert_eq!(
+            payload.get("model").and_then(|value| value.as_str()),
+            Some("gpt-5")
+        );
+        assert_eq!(
+            payload.get("stream").and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            payload.get("store").and_then(|value| value.as_bool()),
+            Some(false)
+        );
         assert_eq!(
             payload
                 .get("input")
@@ -2399,14 +2577,81 @@ mod tests {
     }
 
     #[test]
+    fn maps_chat_request_model_alias_to_upstream() {
+        let request = json!({
+            "model": "gpt-5-4",
+            "messages": [
+                { "role": "user", "content": "hello" }
+            ]
+        });
+
+        let (payload, _) =
+            convert_openai_chat_request_to_codex(&request).expect("payload should convert");
+
+        assert_eq!(
+            payload.get("model").and_then(|value| value.as_str()),
+            Some("gpt-5.4")
+        );
+    }
+
+    #[test]
+    fn maps_responses_request_model_alias_to_upstream() {
+        let request = json!({
+            "model": "gpt-5-4",
+            "input": "hello"
+        });
+
+        let (payload, downstream_stream) =
+            normalize_openai_responses_request(request).expect("request should normalize");
+
+        assert!(!downstream_stream);
+        assert_eq!(
+            payload.get("model").and_then(|value| value.as_str()),
+            Some("gpt-5.4")
+        );
+    }
+
+    #[test]
+    fn rejects_chat_request_with_non_alias_gpt_5_4_name() {
+        let request = json!({
+            "model": "gpt-5.4",
+            "messages": [
+                { "role": "user", "content": "hello" }
+            ]
+        });
+
+        let error = convert_openai_chat_request_to_codex(&request)
+            .expect_err("request should require gpt-5-4 alias");
+
+        assert!(error.contains("gpt-5-4"));
+    }
+
+    #[test]
+    fn rejects_responses_request_with_legacy_gpt5_4_name() {
+        let request = json!({
+            "model": "gpt5.4",
+            "input": "hello"
+        });
+
+        let error = normalize_openai_responses_request(request)
+            .expect_err("request should require gpt-5-4 alias");
+
+        assert!(error.contains("gpt-5-4"));
+    }
+
+    #[test]
     fn extracts_completed_response_from_sse_body() {
         let body = br#"event: response.completed
 data: {"type":"response.completed","response":{"id":"resp_123","created_at":1,"model":"gpt-5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"2"}]}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}
 
 "#;
 
-        let response = extract_completed_response_from_sse(body).expect("response.completed expected");
-        assert_eq!(response.get("id").and_then(|value| value.as_str()), Some("resp_123"));
+        let response =
+            extract_completed_response_from_sse(body).expect("response.completed expected");
+        assert_eq!(
+            response.get("id").and_then(|value| value.as_str()),
+            Some("resp_123")
+        );
         assert_eq!(
             response
                 .get("output")
@@ -2464,6 +2709,71 @@ data: {"type":"response.completed","response":{"id":"resp_123","created_at":1,"m
                 .and_then(|value| value.get("completion_tokens"))
                 .and_then(|value| value.as_i64()),
             Some(85)
+        );
+    }
+
+    #[test]
+    fn maps_completed_response_model_alias_back_to_client() {
+        let response = json!({
+            "id": "resp_123",
+            "created_at": 1772966030i64,
+            "model": "gpt5.4-2026-03-09",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        { "type": "output_text", "text": "2" }
+                    ]
+                }
+            ]
+        });
+
+        let converted = convert_completed_response_to_chat_completion(&response);
+
+        assert_eq!(
+            converted.get("model").and_then(|value| value.as_str()),
+            Some("gpt-5.4-2026-03-09")
+        );
+    }
+
+    #[test]
+    fn rewrites_responses_payload_models_for_client() {
+        let response = json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_123",
+                "model": "gpt5.4",
+                "status": "completed"
+            }
+        });
+
+        let rewritten = rewrite_response_models_for_client(response);
+
+        assert_eq!(
+            rewritten
+                .get("response")
+                .and_then(|value| value.get("model"))
+                .and_then(|value| value.as_str()),
+            Some("gpt-5.4")
+        );
+    }
+
+    #[test]
+    fn rewrites_sse_event_models_for_client() {
+        let data = r#"{"type":"response.created","response":{"id":"resp_123","model":"gpt5.4"}}"#;
+
+        let rewritten = rewrite_sse_event_data_models_for_client(data);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&rewritten).expect("rewritten event should stay valid json");
+
+        assert_eq!(
+            parsed
+                .get("response")
+                .and_then(|value| value.get("model"))
+                .and_then(|value| value.as_str()),
+            Some("gpt-5.4")
         );
     }
 }

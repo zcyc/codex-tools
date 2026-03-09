@@ -46,7 +46,8 @@ pub async fn run_proxy_daemon(options: ProxyDaemonOptions) -> Result<(), String>
     }
 
     let storage = new_proxy_storage_context(options.data_dir.clone(), store_lock, false);
-    let status = start_api_proxy_with_runtime(&storage, &runtime_slot, options.port, &options.host).await?;
+    let status =
+        start_api_proxy_with_runtime(&storage, &runtime_slot, options.port, &options.host).await?;
     let port = status
         .port
         .ok_or_else(|| "代理已启动，但未返回监听端口".to_string())?;
@@ -144,8 +145,8 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
         use tokio::signal::unix::signal;
         use tokio::signal::unix::SignalKind;
 
-        let mut terminate =
-            signal(SignalKind::terminate()).map_err(|error| format!("监听 SIGTERM 失败: {error}"))?;
+        let mut terminate = signal(SignalKind::terminate())
+            .map_err(|error| format!("监听 SIGTERM 失败: {error}"))?;
         tokio::select! {
             result = tokio::signal::ctrl_c() => {
                 result.map_err(|error| format!("监听 Ctrl+C 失败: {error}"))?;

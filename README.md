@@ -42,6 +42,19 @@
   2. 优化下载页样式。
 - v0.2.1：优化整体启动方式。
 
+## Cursor API反代功能提示
+1. 通过 Cursor 官网 下载并安装 Cursor。
+
+2. 在 Cursor 中，点击2026-02-03_16-52-37图标，单击Cursor Settings，选择Models页面。
+
+3. 开启 OpenAI API Key，填入您的 API Key。
+
+4. 开启 Override OpenAI Base URL，填入地址。
+
+5. 在Add or search model文本框中，输入Coding Plan支持的模型中的模型名称，点击Add Custom Model。
+
+6. 添加模型名称为gpt-5-4 （目前只支持这个一个）
+
 ## 应用截图
 
 ![Codex Tools Screenshot](public/ScreenShot.png)
