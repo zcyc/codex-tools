@@ -122,6 +122,7 @@ export function AccountCard({
   const normalizedPlan = account.planType || usage?.planType;
   const planLabel = formatPlan(normalizedPlan, copy.accountCard.planLabels);
   const tone = planTone(normalizedPlan);
+  const isFreePlan = tone === "free";
   const launchLabel = isSwitching ? copy.accountCard.launching : copy.accountCard.launch;
   const fiveHourReset = formatResetValue(fiveHour?.resetAt, locale);
   const oneWeekReset = formatResetValue(oneWeek?.resetAt, locale);
@@ -166,20 +167,22 @@ export function AccountCard({
         </button>
       </header>
 
-      <div className="usageGrid">
-        <UsageDial
-          accent="hot"
-          centerLabel={copy.accountCard.used}
-          label={formatWindowLabel(fiveHour, {
-            fallback: copy.accountCard.fiveHourFallback,
-            oneWeek: copy.accountCard.oneWeekLabel,
-            hourSuffix: copy.accountCard.hourSuffix,
-            minuteSuffix: copy.accountCard.minuteSuffix,
-          })}
-          resetTitle={copy.accountCard.resetAt}
-          resetValue={fiveHourReset}
-          usedPercent={fiveHour?.usedPercent}
-        />
+      <div className={`usageGrid ${isFreePlan ? "isSingle" : ""}`}>
+        {!isFreePlan && (
+          <UsageDial
+            accent="hot"
+            centerLabel={copy.accountCard.used}
+            label={formatWindowLabel(fiveHour, {
+              fallback: copy.accountCard.fiveHourFallback,
+              oneWeek: copy.accountCard.oneWeekLabel,
+              hourSuffix: copy.accountCard.hourSuffix,
+              minuteSuffix: copy.accountCard.minuteSuffix,
+            })}
+            resetTitle={copy.accountCard.resetAt}
+            resetValue={fiveHourReset}
+            usedPercent={fiveHour?.usedPercent}
+          />
+        )}
         <UsageDial
           accent="cool"
           centerLabel={copy.accountCard.used}

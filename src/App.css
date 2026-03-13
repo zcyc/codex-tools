@@ -2397,6 +2397,10 @@ button.bottomDockButton.isActive:focus-visible {
   background: color-mix(in srgb, var(--body-bg) 14%, white 86%);
 }
 
+.usageGrid.isSingle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .usageDial {
   display: grid;
   justify-items: center;
