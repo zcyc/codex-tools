@@ -57,6 +57,7 @@ export function BottomDock({
         title={copy.bottomDock.accounts}
       >
         <AccountsIcon />
+        <span className="bottomDockLabel">{copy.bottomDock.accounts}</span>
       </button>
       <button
         className={`bottomDockButton${proxyActive ? " isActive" : ""}`}
@@ -65,6 +66,7 @@ export function BottomDock({
         title={copy.bottomDock.proxy}
       >
         <ProxyIcon />
+        <span className="bottomDockLabel">{copy.bottomDock.proxy}</span>
       </button>
       <button
         className={`bottomDockButton${settingsActive ? " isActive" : ""}`}
@@ -73,6 +75,7 @@ export function BottomDock({
         title={copy.bottomDock.settings}
       >
         <SettingsIcon />
+        <span className="bottomDockLabel">{copy.bottomDock.settings}</span>
       </button>
     </nav>
   );

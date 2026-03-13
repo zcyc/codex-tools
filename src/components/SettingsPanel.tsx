@@ -39,144 +39,147 @@ export function SettingsPanel({
 
   return (
     <section className="settingsPage" aria-label={copy.settings.title}>
-      <div className="settingsHeader">
-        <div>
-          <h2>{copy.settings.title}</h2>
-          <p>{copy.settings.subtitle}</p>
+      <div className="settingsShell">
+        <div className="settingsHeader">
+          <div>
+            <h2>{copy.settings.title}</h2>
+          </div>
         </div>
-      </div>
 
-      <div className="settingRow">
-        <div className="settingMeta">
-          <strong>{languageLabel}</strong>
-          <p>{copy.settings.languageSubtitle}</p>
-        </div>
-        <EditorMultiSelect
-          options={languageOptions}
-          value={locale}
-          className="languagePicker"
-          ariaLabel={languageLabel}
-          placeholder={languageLabel}
-          onChange={setLocale}
-        />
-      </div>
+        <div className="settingsGroup">
+          <div className="settingRow">
+            <div className="settingMeta">
+              <strong>{languageLabel}</strong>
+            </div>
+            <EditorMultiSelect
+              options={languageOptions}
+              value={locale}
+              className="languagePicker"
+              ariaLabel={languageLabel}
+              placeholder={languageLabel}
+              onChange={setLocale}
+            />
+          </div>
 
-      <div className="settingRow">
-        <div className="settingMeta">
-          <strong>{copy.settings.theme.label}</strong>
-          <p>{copy.settings.theme.description}</p>
-        </div>
-        <ThemeSwitch themeMode={themeMode} onToggle={onToggleTheme} />
-      </div>
+          <div className="settingRow">
+            <div className="settingMeta">
+              <strong>{copy.settings.theme.label}</strong>
+            </div>
+            <ThemeSwitch themeMode={themeMode} onToggle={onToggleTheme} />
+          </div>
 
-      <div className="settingRow">
-        <div className="settingMeta">
-          <strong>{copy.settings.trayUsageDisplay.label}</strong>
-          <p>{copy.settings.trayUsageDisplay.description}</p>
+          <div className="settingRow">
+            <div className="settingMeta">
+              <strong>{copy.settings.trayUsageDisplay.label}</strong>
+            </div>
+            <div className="modeGroup" role="radiogroup" aria-label={copy.settings.trayUsageDisplay.groupAriaLabel}>
+              <button
+                className={settings.trayUsageDisplayMode === "remaining" ? "primary" : "ghost"}
+                disabled={savingSettings}
+                onClick={() => onUpdateSettings({ trayUsageDisplayMode: "remaining" })}
+                aria-pressed={settings.trayUsageDisplayMode === "remaining"}
+              >
+                {copy.settings.trayUsageDisplay.remaining}
+              </button>
+              <button
+                className={settings.trayUsageDisplayMode === "used" ? "primary" : "ghost"}
+                disabled={savingSettings}
+                onClick={() => onUpdateSettings({ trayUsageDisplayMode: "used" })}
+                aria-pressed={settings.trayUsageDisplayMode === "used"}
+              >
+                {copy.settings.trayUsageDisplay.used}
+              </button>
+              <button
+                className={settings.trayUsageDisplayMode === "hidden" ? "primary" : "ghost"}
+                disabled={savingSettings}
+                onClick={() => onUpdateSettings({ trayUsageDisplayMode: "hidden" })}
+                aria-pressed={settings.trayUsageDisplayMode === "hidden"}
+              >
+                {copy.settings.trayUsageDisplay.hidden}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="modeGroup" role="radiogroup" aria-label={copy.settings.trayUsageDisplay.groupAriaLabel}>
-          <button
-            className={settings.trayUsageDisplayMode === "remaining" ? "primary" : "ghost"}
+
+        <div className="settingsGroup">
+          <SwitchField
+            checked={settings.launchAtStartup}
+            onChange={(checked) => onUpdateSettings({ launchAtStartup: checked })}
+            label={copy.settings.launchAtStartup.label}
+            checkedText={copy.settings.launchAtStartup.checkedText}
+            uncheckedText={copy.settings.launchAtStartup.uncheckedText}
             disabled={savingSettings}
-            onClick={() => onUpdateSettings({ trayUsageDisplayMode: "remaining" })}
-            aria-pressed={settings.trayUsageDisplayMode === "remaining"}
-          >
-            {copy.settings.trayUsageDisplay.remaining}
-          </button>
-          <button
-            className={settings.trayUsageDisplayMode === "used" ? "primary" : "ghost"}
+          />
+
+          <SwitchField
+            checked={settings.launchCodexAfterSwitch}
+            onChange={(checked) => onUpdateSettings({ launchCodexAfterSwitch: checked })}
+            label={copy.settings.launchCodexAfterSwitch.label}
+            checkedText={copy.settings.launchCodexAfterSwitch.checkedText}
+            uncheckedText={copy.settings.launchCodexAfterSwitch.uncheckedText}
             disabled={savingSettings}
-            onClick={() => onUpdateSettings({ trayUsageDisplayMode: "used" })}
-            aria-pressed={settings.trayUsageDisplayMode === "used"}
-          >
-            {copy.settings.trayUsageDisplay.used}
-          </button>
-          <button
-            className={settings.trayUsageDisplayMode === "hidden" ? "primary" : "ghost"}
+          />
+
+          <SwitchField
+            checked={settings.syncOpencodeOpenaiAuth}
+            onChange={(checked) => onUpdateSettings({ syncOpencodeOpenaiAuth: checked })}
+            label={copy.settings.syncOpencode.label}
+            checkedText={copy.settings.syncOpencode.checkedText}
+            uncheckedText={copy.settings.syncOpencode.uncheckedText}
             disabled={savingSettings}
-            onClick={() => onUpdateSettings({ trayUsageDisplayMode: "hidden" })}
-            aria-pressed={settings.trayUsageDisplayMode === "hidden"}
-          >
-            {copy.settings.trayUsageDisplay.hidden}
-          </button>
+          />
+
+          <SwitchField
+            checked={settings.restartEditorsOnSwitch}
+            onChange={(checked) => {
+              if (checked && settings.restartEditorTargets.length === 0 && installedEditorApps.length > 0) {
+                onUpdateSettings({
+                  restartEditorsOnSwitch: true,
+                  restartEditorTargets: [installedEditorApps[0].id],
+                });
+                return;
+              }
+              onUpdateSettings({ restartEditorsOnSwitch: checked });
+            }}
+            label={copy.settings.restartEditorsOnSwitch.label}
+            checkedText={copy.settings.restartEditorsOnSwitch.checkedText}
+            uncheckedText={copy.settings.restartEditorsOnSwitch.uncheckedText}
+            disabled={savingSettings}
+          />
+
+          {settings.restartEditorsOnSwitch ? (
+            <div className="settingRow settingRowCompact settingRowNested">
+              <div className="settingMeta">
+                <strong>{copy.settings.restartEditorTargets.label}</strong>
+              </div>
+              {installedEditorApps.length > 0 ? (
+                <EditorMultiSelect
+                  options={installedEditorApps}
+                  value={settings.restartEditorTargets[0] ?? null}
+                  onChange={(selected) =>
+                    onUpdateSettings(
+                      { restartEditorTargets: [selected] },
+                      { silent: true, keepInteractive: true },
+                    )
+                  }
+                />
+              ) : (
+                <span className="settingValueMuted">{copy.settings.noSupportedEditors}</span>
+              )}
+            </div>
+          ) : null}
         </div>
-      </div>
 
-      <SwitchField
-        checked={settings.launchAtStartup}
-        onChange={(checked) => onUpdateSettings({ launchAtStartup: checked })}
-        label={copy.settings.launchAtStartup.label}
-        description={copy.settings.launchAtStartup.description}
-        checkedText={copy.settings.launchAtStartup.checkedText}
-        uncheckedText={copy.settings.launchAtStartup.uncheckedText}
-        disabled={savingSettings}
-      />
-
-      <SwitchField
-        checked={settings.launchCodexAfterSwitch}
-        onChange={(checked) => onUpdateSettings({ launchCodexAfterSwitch: checked })}
-        label={copy.settings.launchCodexAfterSwitch.label}
-        description={copy.settings.launchCodexAfterSwitch.description}
-        checkedText={copy.settings.launchCodexAfterSwitch.checkedText}
-        uncheckedText={copy.settings.launchCodexAfterSwitch.uncheckedText}
-        disabled={savingSettings}
-      />
-
-      <SwitchField
-        checked={settings.syncOpencodeOpenaiAuth}
-        onChange={(checked) => onUpdateSettings({ syncOpencodeOpenaiAuth: checked })}
-        label={copy.settings.syncOpencode.label}
-        description={copy.settings.syncOpencode.description}
-        checkedText={copy.settings.syncOpencode.checkedText}
-        uncheckedText={copy.settings.syncOpencode.uncheckedText}
-        disabled={savingSettings}
-      />
-
-      <SwitchField
-        checked={settings.restartEditorsOnSwitch}
-        onChange={(checked) => {
-          if (checked && settings.restartEditorTargets.length === 0 && installedEditorApps.length > 0) {
-            onUpdateSettings({
-              restartEditorsOnSwitch: true,
-              restartEditorTargets: [installedEditorApps[0].id],
-            });
-            return;
-          }
-          onUpdateSettings({ restartEditorsOnSwitch: checked });
-        }}
-        label={copy.settings.restartEditorsOnSwitch.label}
-        description={copy.settings.restartEditorsOnSwitch.description}
-        checkedText={copy.settings.restartEditorsOnSwitch.checkedText}
-        uncheckedText={copy.settings.restartEditorsOnSwitch.uncheckedText}
-        disabled={savingSettings}
-      />
-
-      <div className="settingRow">
-        <div className="settingMeta">
-          <strong>{copy.settings.restartEditorTargets.label}</strong>
-          <p>{copy.settings.restartEditorTargets.description}</p>
+        <div className="settingsGroup settingsGroupAction">
+          <div className="settingRow">
+            <div className="settingMeta">
+              <strong>{copy.topBar.checkUpdate}</strong>
+            </div>
+            <button className="primary" onClick={onCheckUpdate} disabled={checkingUpdate}>
+              {checkingUpdate ? copy.topBar.checkingUpdate : copy.topBar.checkUpdate}
+            </button>
+          </div>
         </div>
-        <EditorMultiSelect
-          options={installedEditorApps}
-          value={settings.restartEditorTargets[0] ?? null}
-          disabled={installedEditorApps.length === 0}
-          onChange={(selected) =>
-            onUpdateSettings(
-              { restartEditorTargets: [selected] },
-              { silent: true, keepInteractive: true },
-            )
-          }
-        />
-      </div>
-      {installedEditorApps.length === 0 && <p className="hint">{copy.settings.noSupportedEditors}</p>}
-
-      <div className="settingRow">
-        <div className="settingMeta">
-          <strong>{copy.topBar.checkUpdate}</strong>
-        </div>
-        <button className="primary" onClick={onCheckUpdate} disabled={checkingUpdate}>
-          {checkingUpdate ? copy.topBar.checkingUpdate : copy.topBar.checkUpdate}
-        </button>
       </div>
     </section>
   );

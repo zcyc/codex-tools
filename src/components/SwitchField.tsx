@@ -2,7 +2,6 @@ type SwitchFieldProps = {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
-  description: string;
   checkedText: string;
   uncheckedText: string;
   disabled?: boolean;
@@ -12,7 +11,6 @@ export function SwitchField({
   checked,
   onChange,
   label,
-  description,
   checkedText,
   uncheckedText,
   disabled = false,
@@ -21,7 +19,6 @@ export function SwitchField({
     <div className="settingRow">
       <div className="settingMeta">
         <strong>{label}</strong>
-        <p>{description}</p>
       </div>
       <label className="themeSwitch" aria-label={label}>
         <input

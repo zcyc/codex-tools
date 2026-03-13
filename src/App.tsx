@@ -122,8 +122,6 @@ function App() {
           showRefresh={activeTab === "accounts"}
         />
 
-        <MetaStrip accountCount={accounts.length} currentCount={currentCount} />
-
         <AddAccountDialog
           open={addDialogOpen}
           startingAdd={startingAdd}
@@ -148,14 +146,17 @@ function App() {
 
         <section className="viewStage">
           {activeTab === "accounts" ? (
-            <>
-              <AddAccountSection
-                startingAdd={startingAdd}
-                addFlowActive={Boolean(addFlow)}
-                onOpenAddDialog={onOpenAddDialog}
-                onSmartSwitch={() => void onSmartSwitch()}
-                smartSwitching={smartSwitching}
-              />
+            <div className="accountsPage">
+              <div className="accountsHero">
+                <MetaStrip accountCount={accounts.length} currentCount={currentCount} />
+                <AddAccountSection
+                  startingAdd={startingAdd}
+                  addFlowActive={Boolean(addFlow)}
+                  onOpenAddDialog={onOpenAddDialog}
+                  onSmartSwitch={() => void onSmartSwitch()}
+                  smartSwitching={smartSwitching}
+                />
+              </div>
               <AccountsGrid
                 accounts={accounts}
                 loading={loading}
@@ -164,7 +165,7 @@ function App() {
                 onSwitch={(account) => void onSwitch(account)}
                 onDelete={(account) => void onDelete(account)}
               />
-            </>
+            </div>
           ) : activeTab === "proxy" ? (
             <ApiProxyPanel
               status={apiProxyStatus}
@@ -222,11 +223,11 @@ function App() {
             />
           )}
         </section>
+        <BottomDock
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+        />
       </main>
-      <BottomDock
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-      />
     </div>
   );
 }
