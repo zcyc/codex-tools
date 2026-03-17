@@ -60,6 +60,7 @@ const DEFAULT_PROXY_PORT: u16 = 8787;
 const DEFAULT_PROXY_REQUEST_BODY_LIMIT_MIB: usize = 512;
 const DEFAULT_PROXY_REQUEST_BODY_LIMIT_BYTES: usize =
     DEFAULT_PROXY_REQUEST_BODY_LIMIT_MIB * 1024 * 1024;
+const DEFAULT_PROXY_UPSTREAM_TIMEOUT_SECS: u64 = 1_800;
 const PROXY_REQUEST_BODY_LIMIT_MIB_ENV_VAR: &str = "CODEX_TOOLS_PROXY_MAX_BODY_MIB";
 const CODEX_CLIENT_VERSION: &str = "0.101.0";
 const CODEX_USER_AGENT: &str = "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464";
@@ -273,7 +274,9 @@ pub(crate) async fn start_api_proxy_with_runtime(
 
     let client = reqwest::Client::builder()
         .user_agent("codex-tools-proxy/0.1")
-        .timeout(std::time::Duration::from_secs(180))
+        .timeout(std::time::Duration::from_secs(
+            DEFAULT_PROXY_UPSTREAM_TIMEOUT_SECS,
+        ))
         .build()
         .map_err(|error| format!("创建代理 HTTP 客户端失败: {error}"))?;
 
