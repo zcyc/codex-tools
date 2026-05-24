@@ -368,6 +368,7 @@ type ApiProxyUsageSeriesView = {
   totalCalls: number;
   totalTokens: number;
   totalValue: number;
+  bucketPoints: ApiProxyUsagePlotPoint[];
   points: ApiProxyUsagePlotPoint[];
   curveSegments: ApiProxyUsageCurveSegment[];
   linePath: string;
@@ -379,7 +380,10 @@ type ApiProxyUsageHoverState = {
   cursorY: number;
   tooltipX: number;
   tooltipY: number;
-  timestamp: number;
+  bucketStartTimestamp: number;
+  bucketEndTimestamp: number;
+  bucketStartX: number;
+  bucketEndX: number;
   timeLabel: string;
   metricLabel: string;
   entries: Array<{
@@ -496,24 +500,43 @@ function formatUsageAxisValue(value: number | undefined | null) {
   return String(Math.round(normalized));
 }
 
-function formatUsageTooltipTime(locale: string, timestampSec: number, range: ApiProxyUsageRange) {
-  const date = new Date(timestampSec * 1000);
+function usageTooltipDateTimeOptions(range: ApiProxyUsageRange): Intl.DateTimeFormatOptions {
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+
+  if (range === "1h") {
+    options.second = "2-digit";
+  }
+
+  if (range === "14d" || range === "30d") {
+    delete options.hour;
+    delete options.minute;
+    delete options.second;
+  }
+
+  return options;
+}
+
+function formatUsageTooltipTime(
+  locale: string,
+  bucketStartSec: number,
+  bucketEndSec: number,
+  range: ApiProxyUsageRange,
+) {
+  const startDate = new Date(bucketStartSec * 1000);
+  const endDate = new Date(bucketEndSec * 1000);
 
   try {
-    const options: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    };
-
-    if (range === "1h") {
-      options.second = "2-digit";
-    }
-
-    return new Intl.DateTimeFormat(locale, options).format(date);
+    const formatter = new Intl.DateTimeFormat(locale, usageTooltipDateTimeOptions(range));
+    const startLabel = formatter.format(startDate);
+    const endLabel = formatter.format(endDate);
+    return startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`;
   } catch {
-    return date.toLocaleString(locale);
+    return `${startDate.toLocaleString(locale)} - ${endDate.toLocaleString(locale)}`;
   }
 }
 
@@ -585,6 +608,54 @@ function interpolateSeriesAtX(
   return null;
 }
 
+function resolveUsageBucketWindow(
+  pointerTimestamp: number,
+  chartStartTimestamp: number,
+  chartEndTimestamp: number,
+  bucketSeconds: number,
+  series: ApiProxyUsageSeriesView,
+) {
+  if (series.bucketPoints.length === 0) {
+    return null;
+  }
+
+  if (series.bucketPoints.length === 1) {
+    const point = series.bucketPoints[0];
+    return {
+      point,
+      bucketStartTimestamp: Math.max(chartStartTimestamp, point.timestamp),
+      bucketEndTimestamp: chartEndTimestamp,
+    };
+  }
+
+  for (let index = 0; index < series.bucketPoints.length; index += 1) {
+    const point = series.bucketPoints[index];
+    const nextPoint = series.bucketPoints[index + 1];
+    const rawBucketStart = point.timestamp;
+    const rawBucketEnd = nextPoint?.timestamp ?? point.timestamp + bucketSeconds;
+    const bucketStartTimestamp = Math.max(chartStartTimestamp, rawBucketStart);
+    const bucketEndTimestamp = Math.min(chartEndTimestamp, rawBucketEnd);
+
+    if (
+      pointerTimestamp >= bucketStartTimestamp &&
+      (pointerTimestamp < bucketEndTimestamp || index === series.bucketPoints.length - 1)
+    ) {
+      return {
+        point,
+        bucketStartTimestamp,
+        bucketEndTimestamp,
+      };
+    }
+  }
+
+  const lastPoint = series.bucketPoints[series.bucketPoints.length - 1];
+  return {
+    point: lastPoint,
+    bucketStartTimestamp: Math.max(chartStartTimestamp, lastPoint.timestamp),
+    bucketEndTimestamp: chartEndTimestamp,
+  };
+}
+
 function clampTooltipPosition(
   anchorX: number,
   anchorY: number,
@@ -640,7 +711,9 @@ function resolveUsageHoverState({
   locale,
   range,
   startTimestamp,
+  endTimestamp,
   rangeSeconds,
+  bucketSeconds,
   metric,
   metricLabel,
 }: {
@@ -655,7 +728,9 @@ function resolveUsageHoverState({
   locale: string;
   range: ApiProxyUsageRange;
   startTimestamp: number;
+  endTimestamp: number;
   rangeSeconds: number;
+  bucketSeconds: number;
   metric: ApiProxyUsageMetric;
   metricLabel: string;
 }): ApiProxyUsageHoverState | null {
@@ -681,23 +756,58 @@ function resolveUsageHoverState({
     return null;
   }
 
-  const entries = series
-    .map((item) => {
-      const interpolated = interpolateSeriesAtX(relativeX, item);
-      if (!interpolated) {
-        return null;
-      }
+  const pointerTimestamp =
+    startTimestamp + ((relativeX - plotLeft) / Math.max(plotRight - plotLeft, 1)) * rangeSeconds;
+  const primaryBucket = resolveUsageBucketWindow(
+    pointerTimestamp,
+    startTimestamp,
+    endTimestamp,
+    bucketSeconds,
+    series[0],
+  );
+  if (!primaryBucket) {
+    return null;
+  }
 
-      return {
-        model: item.model,
-        color: item.color,
-        value: interpolated.value,
-        valueLabel: formatUsageMetricValue(interpolated.value, locale, metric),
-        pointX: interpolated.x,
-        pointY: interpolated.y,
-        timestamp: interpolated.timestamp,
-      };
-    })
+  const bucketMidTimestamp =
+    primaryBucket.bucketStartTimestamp +
+    (primaryBucket.bucketEndTimestamp - primaryBucket.bucketStartTimestamp) / 2;
+  const bucketStartX =
+    plotLeft +
+    ((primaryBucket.bucketStartTimestamp - startTimestamp) / Math.max(rangeSeconds, 1)) * (plotRight - plotLeft);
+  const bucketEndX =
+    plotLeft +
+    ((primaryBucket.bucketEndTimestamp - startTimestamp) / Math.max(rangeSeconds, 1)) * (plotRight - plotLeft);
+  const bucketCursorX =
+    plotLeft +
+    ((bucketMidTimestamp - startTimestamp) / Math.max(rangeSeconds, 1)) * (plotRight - plotLeft);
+
+    const entries = series
+      .map((item) => {
+        const bucket = resolveUsageBucketWindow(
+          pointerTimestamp,
+          startTimestamp,
+        endTimestamp,
+        bucketSeconds,
+        item,
+      );
+        if (!bucket) {
+          return null;
+        }
+        const interpolated = interpolateSeriesAtX(bucketCursorX, item);
+        if (!interpolated) {
+          return null;
+        }
+
+        return {
+          model: item.model,
+          color: item.color,
+          value: bucket.point.value,
+          valueLabel: formatUsageMetricValue(bucket.point.value, locale, metric),
+          pointX: interpolated.x,
+          pointY: interpolated.y,
+        };
+      })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
     .sort((left, right) => right.value - left.value || left.model.localeCompare(right.model));
 
@@ -705,7 +815,6 @@ function resolveUsageHoverState({
     return null;
   }
 
-  const timestamp = startTimestamp + ((relativeX - plotLeft) / Math.max(plotRight - plotLeft, 1)) * rangeSeconds;
   const anchorX = clientX - frameRect.left;
   const anchorY = clientY - frameRect.top;
   const tooltipSize = getUsageTooltipSize(entries.length);
@@ -718,12 +827,20 @@ function resolveUsageHoverState({
   );
 
   return {
-    cursorX: relativeX,
+    cursorX: bucketCursorX,
     cursorY: relativeY,
     tooltipX: tooltipPosition.x,
     tooltipY: tooltipPosition.y,
-    timestamp,
-    timeLabel: formatUsageTooltipTime(locale, Math.round(timestamp), range),
+    bucketStartTimestamp: primaryBucket.bucketStartTimestamp,
+    bucketEndTimestamp: primaryBucket.bucketEndTimestamp,
+    bucketStartX,
+    bucketEndX,
+    timeLabel: formatUsageTooltipTime(
+      locale,
+      Math.round(primaryBucket.bucketStartTimestamp),
+      Math.round(primaryBucket.bucketEndTimestamp),
+      range,
+    ),
     metricLabel,
     entries,
   };
@@ -931,6 +1048,7 @@ function ApiProxyUsageChart({
 
     const startTimestamp = endTimestamp - selectedRangeSeconds;
     const baselineY = margins.top + plotHeight;
+    const bucketSeconds = Math.max(1, stats?.bucketSeconds ?? selectedRangeSeconds);
 
     const prepared = ordered.map((item, index) => {
       const color = pickUsageColor(index);
@@ -972,16 +1090,7 @@ function ApiProxyUsageChart({
 
     const yDomain = maxValue * 1.12;
     const series = prepared.map((item) => {
-      const pointValues = [...item.metricPoints];
-      const latestPoint = pointValues[pointValues.length - 1];
-      if (latestPoint && latestPoint.timestamp < endTimestamp) {
-        pointValues.push({
-          timestamp: endTimestamp,
-          value: latestPoint.value,
-        });
-      }
-
-      const points = pointValues.map((point) => {
+      const bucketPoints = item.metricPoints.map((point) => {
         const clampedTimestamp = clampUsageValue(point.timestamp, startTimestamp, endTimestamp);
         const x =
           margins.left +
@@ -995,6 +1104,19 @@ function ApiProxyUsageChart({
         };
       });
 
+      const pointValues = [...bucketPoints];
+      const latestPoint = pointValues[pointValues.length - 1];
+      if (latestPoint && latestPoint.timestamp < endTimestamp) {
+        pointValues.push({
+          timestamp: endTimestamp,
+          value: latestPoint.value,
+          x: margins.left + plotWidth,
+          y: latestPoint.y,
+        });
+      }
+
+      const points = pointValues;
+
       const curveSegments = buildMonotoneCurveSegments(points);
       const linePath = buildSmoothPath(points, curveSegments);
       const areaPath = buildAreaPath(points, baselineY, linePath);
@@ -1006,6 +1128,7 @@ function ApiProxyUsageChart({
         totalCalls: item.totalCalls,
         totalTokens: item.totalTokens,
         totalValue: item.totalValue,
+        bucketPoints,
         points,
         curveSegments,
         linePath,
@@ -1015,12 +1138,14 @@ function ApiProxyUsageChart({
 
     return {
       series,
+      bucketSeconds,
       maxValue,
       endTimestamp,
     };
   }, [metric, margins.left, margins.top, plotHeight, plotWidth, selectedRangeSeconds, stats]);
 
   const series = chartData.series;
+  const bucketSeconds = chartData.bucketSeconds ?? Math.max(1, selectedRangeSeconds);
   const hasUsageData = chartData.maxValue > 0 && series.length > 0;
   const endTimestamp = chartData.endTimestamp;
   const startTimestamp = endTimestamp - selectedRangeSeconds;
@@ -1124,14 +1249,16 @@ function ApiProxyUsageChart({
         locale,
         range,
         startTimestamp,
+        endTimestamp,
         rangeSeconds: selectedRangeSeconds,
+        bucketSeconds,
         metric,
         metricLabel,
       });
 
       setHoverState(next);
     },
-    [chartHeight, chartWidth, hasUsageData, locale, margins, metric, metricLabel, range, selectedRangeSeconds, series, startTimestamp],
+    [bucketSeconds, chartHeight, chartWidth, endTimestamp, hasUsageData, locale, margins, metric, metricLabel, range, selectedRangeSeconds, series, startTimestamp],
   );
 
   const handlePointerMove = useCallback(
@@ -1333,6 +1460,13 @@ function ApiProxyUsageChart({
                 </g>
                 {hoverState ? (
                   <g className="proxyUsageHoverLayer" pointerEvents="none">
+                    <rect
+                      className="proxyUsageHoverBand"
+                      x={hoverState.bucketStartX}
+                      y={margins.top}
+                      width={Math.max(1, hoverState.bucketEndX - hoverState.bucketStartX)}
+                      height={plotHeight}
+                    />
                     <line
                       className="proxyUsageHoverCrosshair"
                       x1={hoverState.cursorX}
