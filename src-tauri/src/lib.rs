@@ -926,7 +926,7 @@ async fn switch_account_and_launch(
                 account
                     .auth_refresh_error
                     .clone()
-                    .unwrap_or_else(|| "授权过期，请重新登录授权。".to_string())
+                    .unwrap_or_else(|| "工具保存的授权快照已失效，请重新登录授权。".to_string())
             ));
         }
 
@@ -944,7 +944,7 @@ async fn switch_account_and_launch(
                     || normalized_error == "当前账号授权已过期，请重新登录授权。";
 
                 if should_block_refresh {
-                    let blocked_message = "授权过期，请重新登录授权。";
+                    let blocked_message = "工具保存的授权快照已失效，请重新登录授权。";
                     match app_paths::app_data_dir(&app) {
                         Ok(data_dir) => {
                             let store_path = store::account_store_path_from_data_dir(&data_dir);

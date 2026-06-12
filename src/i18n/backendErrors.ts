@@ -24,11 +24,11 @@ function phrases(
 }
 
 const AUTH_EXPIRED_MESSAGE = phrases(
-  "授权过期，请重新登录授权。",
-  "Authorization expired. Please sign in again.",
-  "認証の有効期限が切れました。再度ログインして認可してください。",
-  "인증이 만료되었습니다. 다시 로그인하여 인증하세요.",
-  "Срок авторизации истек. Войдите снова."
+  "工具保存的授权快照已失效，请重新登录授权。",
+  "The saved authorization snapshot is no longer valid. Please sign in again.",
+  "保存された認証スナップショットが無効になりました。再度ログインして認可してください。",
+  "저장된 인증 스냅샷이 더 이상 유효하지 않습니다. 다시 로그인하여 인증하세요.",
+  "Сохраненный снимок авторизации больше недействителен. Войдите снова."
 );
 
 const DEACTIVATED_ACCOUNT_MESSAGE = phrases(
@@ -52,12 +52,16 @@ const REPLACEMENTS: PhraseReplacement[] = [
   },
   {
     source: "授权过期，请重新登录授权。",
+    target: AUTH_EXPIRED_MESSAGE,
+  },
+  {
+    source: "工具保存的授权快照已失效，请重新登录授权。",
     target: phrases(
-      "授权过期，请重新登录授权。",
-      "Authorization expired. Please sign in again.",
-      "認証の有効期限が切れました。再度ログインして認可してください。",
-      "인증이 만료되었습니다. 다시 로그인하여 인증하세요.",
-      "Срок авторизации истек. Войдите снова."
+      "工具保存的授权快照已失效，请重新登录授权。",
+      "The saved authorization snapshot is no longer valid. Please sign in again.",
+      "保存された認証スナップショットが無効になりました。再度ログインして認可してください。",
+      "저장된 인증 스냅샷이 더 이상 유효하지 않습니다. 다시 로그인하여 인증하세요.",
+      "Сохраненный снимок авторизации больше недействителен. Войдите снова."
     ),
   },
   {

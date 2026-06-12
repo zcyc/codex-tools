@@ -49,10 +49,13 @@ use crate::utils::truncate_for_error;
 
 const DEACTIVATED_WORKSPACE_NOTICE: &str = "该账号已被踢出 team 组织，请重新授权后再刷新。";
 const DEACTIVATED_ACCOUNT_NOTICE: &str = "账号被封禁，请检查邮箱";
-const AUTH_EXPIRED_NOTICE: &str = "授权过期，请重新登录授权。";
+const AUTH_EXPIRED_NOTICE: &str = "工具保存的授权快照已失效，请重新登录授权。";
 const EXPORT_ARCHIVE_ENTRY_NAME: &str = "accounts.json";
 const KEEPALIVE_REFRESH_WINDOW_SECS: i64 = 10 * 60;
-const KEEPALIVE_MAX_LAST_REFRESH_AGE_SECS: i64 = 6 * 60 * 60;
+// 对齐 Codex 官方客户端的刷新模型：不要每隔几小时刷新一次 refresh_token。
+// 不同账号按稳定 hash 分布在 7-8 天窗口内刷新，避免同一批导入账号集中打到刷新端点。
+const KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS: i64 = 7 * 24 * 60 * 60;
+const KEEPALIVE_LAST_REFRESH_JITTER_SECS: i64 = 24 * 60 * 60;
 const CODEX_KEEPALIVE_INTERVAL_SECS: i64 = 5 * 60 * 60;
 const CODEX_KEEPALIVE_TIMEOUT_SECS: u64 = 45;
 const CODEX_KEEPALIVE_MODEL: &str = "gpt-5.3-codex";
@@ -620,6 +623,118 @@ fn should_replace_refresh_target(existing: &RefreshTarget, candidate: &RefreshTa
     candidate.updated_at > existing.updated_at
 }
 
+fn keepalive_max_last_refresh_age_secs(account_key: &str) -> i64 {
+    if KEEPALIVE_LAST_REFRESH_JITTER_SECS <= 0 {
+        return KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS;
+    }
+
+    // 使用稳定 FNV-1a hash，而不是随机种子的 DefaultHasher，确保同一账号跨进程刷新窗口一致。
+    let hash = account_key
+        .as_bytes()
+        .iter()
+        .fold(0xcbf29ce484222325u64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        });
+    KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS
+        + i64::try_from(hash % KEEPALIVE_LAST_REFRESH_JITTER_SECS as u64).unwrap_or(0)
+}
+
+fn auth_json_refresh_token(auth_json: &serde_json::Value) -> Option<&str> {
+    auth_json
+        .get("tokens")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|tokens| tokens.get("refresh_token"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn auth_json_account_key(auth_json: &serde_json::Value) -> Option<String> {
+    extract_auth(auth_json)
+        .ok()
+        .map(|auth| account_group_key(&auth.principal_id, &auth.account_id))
+}
+
+async fn latest_account_auth_json(
+    app: &AppHandle,
+    state: &AppState,
+    account_key: &str,
+) -> Option<serde_json::Value> {
+    if let Ok(Some(current_auth_json)) = read_current_codex_auth_optional() {
+        if auth_json_account_key(&current_auth_json).as_deref() == Some(account_key) {
+            return Some(current_auth_json);
+        }
+    }
+
+    let _guard = state.store_lock.lock().await;
+    let store = load_store(app).ok()?;
+    store
+        .accounts
+        .into_iter()
+        .filter(|account| {
+            !matches!(account.source_kind, AccountSourceKind::Relay)
+                && account.account_key() == account_key
+        })
+        .max_by(|left, right| {
+            (!left.auth_refresh_blocked)
+                .cmp(&(!right.auth_refresh_blocked))
+                .then(left.updated_at.cmp(&right.updated_at))
+        })
+        .map(|account| account.auth_json)
+}
+
+async fn refresh_latest_auth_json_if_newer(
+    app: &AppHandle,
+    state: &AppState,
+    account_key: &str,
+    auth_json: &serde_json::Value,
+) -> serde_json::Value {
+    let Some(latest) = latest_account_auth_json(app, state, account_key).await else {
+        return auth_json.clone();
+    };
+
+    let current_refresh_token = auth_json_refresh_token(auth_json);
+    let latest_refresh_token = auth_json_refresh_token(&latest);
+    if latest_refresh_token.is_some() && latest_refresh_token != current_refresh_token {
+        log::info!("刷新前检测到账号已有更新后的授权快照，改用最新快照 account_key={account_key}");
+        return latest;
+    }
+
+    auth_json.clone()
+}
+
+fn is_stale_refresh_snapshot_error(raw_error: &str) -> bool {
+    let normalized = raw_error.to_ascii_lowercase();
+    normalized.contains("refresh_token_reused")
+        || normalized
+            .contains("your refresh token has already been used to generate a new access token")
+        || is_invalid_refresh_grant(&normalized)
+}
+
+async fn recover_refresh_failure_from_latest_snapshot(
+    app: &AppHandle,
+    state: &AppState,
+    account_key: &str,
+    attempted_auth_json: &serde_json::Value,
+    raw_error: &str,
+) -> Option<serde_json::Value> {
+    if !is_stale_refresh_snapshot_error(raw_error) {
+        return None;
+    }
+
+    let latest = latest_account_auth_json(app, state, account_key).await?;
+    let attempted_refresh_token = auth_json_refresh_token(attempted_auth_json);
+    let latest_refresh_token = auth_json_refresh_token(&latest);
+    if latest_refresh_token.is_some() && latest_refresh_token != attempted_refresh_token {
+        log::warn!(
+            "刷新失败后检测到本地已有更新后的授权快照，使用最新快照恢复 account_key={account_key}"
+        );
+        return Some(latest);
+    }
+
+    None
+}
+
 async fn refresh_usage_for_target(
     app: &AppHandle,
     state: &AppState,
@@ -632,12 +747,18 @@ async fn refresh_usage_for_target(
     let mut auth_refresh_blocked = target.auth_refresh_blocked;
     let mut auth_refresh_error = target.auth_refresh_error.clone();
 
+    if force_auth_refresh && !auth_refresh_blocked {
+        working_auth_json =
+            refresh_latest_auth_json_if_newer(app, state, &target.account_key, &working_auth_json)
+                .await;
+    }
+
     if force_auth_refresh
         && !auth_refresh_blocked
         && auth_tokens_need_keepalive_refresh(
             &working_auth_json,
             KEEPALIVE_REFRESH_WINDOW_SECS,
-            KEEPALIVE_MAX_LAST_REFRESH_AGE_SECS,
+            keepalive_max_last_refresh_age_secs(&target.account_key),
         )
     {
         match refresh_chatgpt_auth_tokens_serialized(&working_auth_json, &state.auth_refresh_lock)
@@ -662,16 +783,31 @@ async fn refresh_usage_for_target(
                 }
             }
             Err(err) => {
-                handle_refresh_failure(
+                if let Some(recovered) = recover_refresh_failure_from_latest_snapshot(
                     app,
                     state,
                     &target.account_key,
+                    &working_auth_json,
                     &err,
-                    &mut auth_refresh_blocked,
-                    &mut auth_refresh_error,
-                    &mut refresh_error,
                 )
-                .await;
+                .await
+                {
+                    working_auth_json = recovered;
+                    auth_refreshed = true;
+                    auth_refresh_blocked = false;
+                    auth_refresh_error = None;
+                } else {
+                    handle_refresh_failure(
+                        app,
+                        state,
+                        &target.account_key,
+                        &err,
+                        &mut auth_refresh_blocked,
+                        &mut auth_refresh_error,
+                        &mut refresh_error,
+                    )
+                    .await;
+                }
             }
         }
     }
@@ -710,16 +846,38 @@ async fn refresh_usage_for_target(
                 };
             }
             Err(err) => {
-                handle_refresh_failure(
+                if let Some(recovered) = recover_refresh_failure_from_latest_snapshot(
                     app,
                     state,
                     &target.account_key,
+                    &working_auth_json,
                     &err,
-                    &mut auth_refresh_blocked,
-                    &mut auth_refresh_error,
-                    &mut refresh_error,
                 )
-                .await;
+                .await
+                {
+                    working_auth_json = recovered;
+                    auth_refreshed = true;
+                    auth_refresh_blocked = false;
+                    auth_refresh_error = None;
+                    extracted = extract_auth(&working_auth_json);
+                    fetch_result = match &extracted {
+                        Ok(auth) => {
+                            fetch_usage_snapshot(&auth.access_token, &auth.account_id).await
+                        }
+                        Err(err) => Err(err.clone()),
+                    };
+                } else {
+                    handle_refresh_failure(
+                        app,
+                        state,
+                        &target.account_key,
+                        &err,
+                        &mut auth_refresh_blocked,
+                        &mut auth_refresh_error,
+                        &mut refresh_error,
+                    )
+                    .await;
+                }
             }
         }
     }
@@ -1630,11 +1788,15 @@ fn normalize_import_source(source: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::expand_import_json_content;
+    use super::is_stale_refresh_snapshot_error;
+    use super::keepalive_max_last_refresh_age_secs;
     use super::normalize_usage_error_message;
     use super::should_suspend_auth_keepalive;
     use super::upsert_prepared_import;
     use super::PreparedImport;
     use super::AUTH_EXPIRED_NOTICE;
+    use super::KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS;
+    use super::KEEPALIVE_LAST_REFRESH_JITTER_SECS;
     use crate::models::AccountsStore;
     use crate::models::StoredAccount;
     use crate::models::UsageSnapshot;
@@ -1906,6 +2068,31 @@ mod tests {
             store.accounts[0].variant_key(),
             store.accounts[1].variant_key()
         );
+    }
+
+    #[test]
+    fn keepalive_refresh_age_is_stable_and_staggered() {
+        let first = keepalive_max_last_refresh_age_secs("account-a");
+        let second = keepalive_max_last_refresh_age_secs("account-b");
+
+        assert_eq!(first, keepalive_max_last_refresh_age_secs("account-a"));
+        assert!(first >= KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS);
+        assert!(first < KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS + KEEPALIVE_LAST_REFRESH_JITTER_SECS);
+        assert!(second >= KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS);
+        assert!(second < KEEPALIVE_LAST_REFRESH_BASE_AGE_SECS + KEEPALIVE_LAST_REFRESH_JITTER_SECS);
+    }
+
+    #[test]
+    fn stale_refresh_snapshot_errors_are_recoverable() {
+        assert!(is_stale_refresh_snapshot_error(
+            r#"刷新登录令牌失败 -> 401: {"code":"refresh_token_reused"}"#
+        ));
+        assert!(is_stale_refresh_snapshot_error(
+            r#"刷新登录令牌失败 -> 400: {"error":"invalid_grant"}"#
+        ));
+        assert!(!is_stale_refresh_snapshot_error(
+            "请求用量接口失败: 500 Internal Server Error"
+        ));
     }
 
     #[test]

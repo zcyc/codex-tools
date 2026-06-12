@@ -429,14 +429,15 @@ pub(crate) fn auth_tokens_expire_within(auth_json: &Value, lead_time_secs: i64) 
     };
     let refresh_deadline = now + lead_time_secs.max(0);
 
-    ["access_token", "id_token"].iter().any(|field| {
-        tokens
-            .get(*field)
-            .and_then(Value::as_str)
-            .and_then(jwt_expiration_unix)
-            .map(|exp| exp <= refresh_deadline)
-            .unwrap_or(false)
-    })
+    // Codex 请求实际使用 access_token；id_token 主要提供身份声明，通常 1 小时过期。
+    // 如果把 id_token 过期也当作刷新条件，工具会远早于 Codex 官方客户端刷新 refresh_token，
+    // 容易把仍可正常使用的账号快照误判成“授权过期”。
+    tokens
+        .get("access_token")
+        .and_then(Value::as_str)
+        .and_then(jwt_expiration_unix)
+        .map(|exp| exp <= refresh_deadline)
+        .unwrap_or(false)
 }
 
 pub(crate) fn auth_tokens_need_refresh(auth_json: &Value) -> bool {
@@ -1033,7 +1034,7 @@ mod tests {
     }
 
     #[test]
-    fn marks_refresh_needed_when_id_token_is_expired() {
+    fn marks_refresh_needed_when_access_token_is_expired() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("current time should be available")
@@ -1041,8 +1042,8 @@ mod tests {
         let auth_json = json!({
             "auth_mode": "chatgpt",
             "tokens": {
-                "access_token": jwt_with_exp(now + 3600),
-                "id_token": jwt_with_exp(now - 5),
+                "access_token": jwt_with_exp(now - 5),
+                "id_token": jwt_with_exp(now + 3600),
                 "refresh_token": "refresh-token"
             }
         });
@@ -1061,6 +1062,24 @@ mod tests {
             "tokens": {
                 "access_token": jwt_with_exp(now + 3600),
                 "id_token": jwt_with_exp(now + 3600),
+                "refresh_token": "refresh-token"
+            }
+        });
+
+        assert!(!auth_tokens_need_refresh(&auth_json));
+    }
+
+    #[test]
+    fn skips_refresh_when_only_id_token_is_expired() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("current time should be available")
+            .as_secs() as i64;
+        let auth_json = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "access_token": jwt_with_exp(now + 3600),
+                "id_token": jwt_with_exp(now - 5),
                 "refresh_token": "refresh-token"
             }
         });

@@ -2597,10 +2597,9 @@ async fn send_codex_request_over_candidates(
                     attempt_errors.push(format!(
                         "{}: {}",
                         candidate.label,
-                        candidate
-                            .auth_refresh_error
-                            .clone()
-                            .unwrap_or_else(|| "授权过期，请重新登录授权。".to_string())
+                        candidate.auth_refresh_error.clone().unwrap_or_else(|| {
+                            "工具保存的授权快照已失效，请重新登录授权。".to_string()
+                        })
                     ));
                     break;
                 }
@@ -2885,7 +2884,10 @@ fn api_proxy_visible_models(settings: &AppSettings) -> Vec<&'static str> {
         .collect()
 }
 
-fn ensure_api_proxy_payload_models_enabled(payload: &Value, settings: &AppSettings) -> Result<(), String> {
+fn ensure_api_proxy_payload_models_enabled(
+    payload: &Value,
+    settings: &AppSettings,
+) -> Result<(), String> {
     let disabled = api_proxy_disabled_model_set(settings);
     let blocked = api_proxy_requested_models_from_payload(payload)
         .into_iter()
@@ -3279,7 +3281,7 @@ fn normalize_proxy_refresh_error(raw_error: &str) -> String {
         || normalized.contains("please try signing in again")
         || normalized.contains("token is expired")
     {
-        return "授权过期，请重新登录授权。".to_string();
+        return "工具保存的授权快照已失效，请重新登录授权。".to_string();
     }
     raw_error.to_string()
 }
@@ -5271,6 +5273,7 @@ mod tests {
     use super::convert_openai_image_edit_request_to_codex;
     use super::convert_openai_image_generation_request_to_codex;
     use super::convert_responses_image_output_to_images_response;
+    use super::ensure_api_proxy_payload_models_enabled;
     use super::extract_completed_response_from_sse;
     use super::find_http_header_end;
     use super::host_matches_no_proxy;
@@ -5285,13 +5288,12 @@ mod tests {
     use super::resolve_proxy_request_body_limit_bytes_from_mib_value;
     use super::rewrite_response_models_for_client;
     use super::rewrite_sse_event_data_models_for_client;
-    use super::sequential_account_key_for_request;
     use super::sanitize_api_proxy_disabled_models_for_settings;
+    use super::sequential_account_key_for_request;
     use super::should_use_responses_websocket;
     use super::translate_sse_event_to_chat_chunk;
     use super::translate_sse_event_to_image_chunk;
     use super::websocket_target_host_port;
-    use super::ensure_api_proxy_payload_models_enabled;
     use super::ApiProxyUsageEvent;
     use super::ChatStreamState;
     use super::ImageMultipartRequest;
@@ -5301,8 +5303,8 @@ mod tests {
     use super::API_PROXY_USAGE_RANGE_1H_SECONDS;
     use super::API_PROXY_USAGE_RETENTION_SECONDS;
     use super::DEFAULT_PROXY_REQUEST_BODY_LIMIT_BYTES;
-    use crate::models::AppSettings;
     use crate::models::ApiProxyLoadBalanceMode;
+    use crate::models::AppSettings;
     use crate::models::StoredAccount;
     use crate::models::UsageSnapshot;
     use crate::models::UsageWindow;
